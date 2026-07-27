@@ -1,0 +1,15 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;min-width:320px;min-height:100vh}
+button,select{cursor:pointer}
+label{display:block;font-size:.8rem;font-weight:600;color:#71717a}
+label input,label select,label textarea{margin-top:.35rem;color:#18181b}
+.dark label input,.dark label select,.dark label textarea{color:#fafafa}
+small{color:#ef4444;display:block;margin-top:.2rem}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:#71717a66;border-radius:10px}
+@media print{aside,header,nav,button{display:none!important}main{padding:0!important}.dark body{background:#fff;color:#111}}
