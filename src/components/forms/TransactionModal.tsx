@@ -11,7 +11,7 @@ const categories=["Salário","Freelance","Moradia","Alimentação","Transporte",
 export function TransactionModal({onClose,transaction}:{onClose:()=>void,transaction?:Transaction}) {
  const {saveTransaction}=useFinance(); const {register,handleSubmit,formState:{errors},reset}=useForm<FormData>({resolver:zodResolver(schema),defaultValues:{type:"expense",status:"paid",date:new Date().toISOString().slice(0,10),paymentMethod:"Pix"}});
  useEffect(()=>{if(transaction)reset(transaction);},[transaction,reset]);
- const submit=(data:FormData)=>{saveTransaction(data,transaction?.id);onClose();};
+ const submit=async(data:FormData)=>{await saveTransaction(data,transaction?.id);onClose();};
  return <Modal title={transaction?"Editar transação":"Nova transação"} onClose={onClose}><form onSubmit={handleSubmit(submit)} className="grid gap-4 sm:grid-cols-2">
   <label>Tipo<Select {...register("type")}><option value="expense">Despesa</option><option value="income">Receita</option></Select></label>
   <label>Valor (R$)<Input type="number" step="0.01" placeholder="0,00" {...register("amount",{valueAsNumber:true})}/><small>{errors.amount?.message}</small></label>
