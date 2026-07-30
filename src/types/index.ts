@@ -10,3 +10,12 @@ export type Goal = {
   deadline: string; createdAt: string;
 };
 export type Page = "dashboard" | "transactions" | "reports" | "budgets" | "goals" | "settings";
+export type Period = "7" | "30" | "month" | "year";
+export type ChartMode = "daily" | "weekly" | "monthly";
+export type CategoryBudget = {
+  id: string; category: string; amount: number; month: number; year: number;
+  createdAt: string; updatedAt: string;
+};
+export type FinancialNotification = {
+  id: string; title: string; description: string; page: Page; level: "info" | "warning" | "danger";
+};

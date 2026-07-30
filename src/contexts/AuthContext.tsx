@@ -9,6 +9,7 @@ type AuthContextValue = {
   signIn: (email: string, password: string) => Promise<AuthResult>;
   signUp: (name: string, email: string, password: string) => Promise<AuthResult>;
   resetPassword: (email: string) => Promise<AuthResult>;
+  signInWithGoogle: () => Promise<AuthResult>;
   signOut: () => Promise<void>;
 };
 
@@ -51,6 +52,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         redirectTo: window.location.origin,
       });
       return error ? { error: error.message } : {};
+    },
+    signInWithGoogle: async () => {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.origin },
+      });
+      if (!error) return {};
+      const message = error.message.toLowerCase();
+      if (message.includes("provider") || message.includes("unsupported")) return { error: "O acesso com Google ainda não está configurado." };
+      if (message.includes("redirect")) return { error: "A URL de retorno não está autorizada. Verifique a configuração do Supabase." };
+      return { error: "Não foi possível entrar com o Google. Tente novamente." };
     },
     signOut: async () => {
       await supabase.auth.signOut();
