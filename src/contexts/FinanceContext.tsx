@@ -6,12 +6,13 @@ import { uid } from "../utils/format";
 import { useAuth } from "./AuthContext";
 
 type Toast = { id: string; message: string; kind: "success" | "error" };
+type SaveResult = { ok: true } | { ok: false; error: string };
 type TransactionInput = Omit<Transaction, "id" | "createdAt">;
 type GoalInput = Omit<Goal, "id" | "createdAt">;
 type FinanceContextValue = {
   transactions: Transaction[]; goals: Goal[]; budget: number; dark: boolean; hiddenValues: boolean;
   toasts: Toast[]; loading: boolean;
-  saveTransaction: (data: TransactionInput, id?: string) => Promise<void>;
+  saveTransaction: (data: TransactionInput, id?: string) => Promise<SaveResult>;
   deleteTransaction: (id: string) => Promise<void>; duplicateTransaction: (id: string) => Promise<void>;
   saveGoal: (data: GoalInput, id?: string) => Promise<void>; deleteGoal: (id: string) => Promise<void>;
   addToGoal: (id: string, amount: number) => Promise<void>; setBudget: (value: number) => Promise<void>;
@@ -67,12 +68,35 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<FinanceContextValue>(() => ({
     transactions, goals, budget, dark, hiddenValues, setHiddenValues, toasts, loading, notify,
     saveTransaction: async (data, id) => {
-      if (!user) return;
-      const row = { user_id:user.id, description:data.description, amount:data.amount, type:data.type, category:data.category, date:data.date, payment_method:data.paymentMethod, status:data.status, notes:data.notes || null };
-      const query = id ? supabase.from("transactions").update(row).eq("id", id).eq("user_id", user.id).select("*").single() : supabase.from("transactions").insert(row).select("*").single();
-      const { data:saved, error } = await query; if (error) return fail(error.message);
-      const item = toTransaction(saved as TransactionRow); setTransactions(current => id ? current.map(entry => entry.id === id ? item : entry) : [item, ...current]);
-      notify(id ? "Transação atualizada" : "Transação criada");
+      if (!user) return { ok:false, error:"Sua sessão expirou. Entre novamente para salvar a transação." };
+      try {
+        const row = { user_id:user.id, description:data.description.trim(), amount:data.amount, type:data.type, category:data.category, date:data.date, payment_method:data.paymentMethod, status:data.status, notes:data.notes?.trim() || null };
+        const query = id ? supabase.from("transactions").update(row).eq("id", id).eq("user_id", user.id).select("*").single() : supabase.from("transactions").insert(row).select("*").single();
+        const { data:saved, error } = await query;
+        if (error) {
+          if (import.meta.env.DEV) console.error("[Vertex Hub] Falha ao salvar transação", error);
+          const message = error.code === "42501"
+            ? "Sua conta não tem permissão para gravar transações. Verifique as políticas do Supabase."
+            : error.code === "42P01" || error.code === "PGRST205"
+              ? "A tabela de transações ainda não foi configurada no Supabase."
+              : "Não foi possível salvar a transação. Tente novamente.";
+          notify(message, "error");
+          return { ok:false, error:message };
+        }
+        if (!saved) {
+          const message = "O servidor não retornou a transação salva. Tente novamente.";
+          notify(message, "error");
+          return { ok:false, error:message };
+        }
+        const item = toTransaction(saved as TransactionRow); setTransactions(current => id ? current.map(entry => entry.id === id ? item : entry) : [item, ...current]);
+        notify(id ? "Transação atualizada" : "Transação criada");
+        return { ok:true };
+      } catch (error) {
+        if (import.meta.env.DEV) console.error("[Vertex Hub] Erro de rede ao salvar transação", error);
+        const message = "Falha de conexão ao salvar. Verifique sua internet e tente novamente.";
+        notify(message, "error");
+        return { ok:false, error:message };
+      }
     },
     deleteTransaction: async id => {
       if (!user) return; const { error } = await supabase.from("transactions").delete().eq("id", id).eq("user_id", user.id); if (error) return fail(error.message);
