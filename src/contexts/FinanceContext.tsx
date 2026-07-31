@@ -28,6 +28,8 @@ const FinanceContext = createContext<FinanceContextValue | null>(null);
 
 export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const userId = user?.id;
+  const userFullName = String(user?.user_metadata.full_name ?? user?.user_metadata.name ?? "");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [budget, setBudgetState] = useState(0);
@@ -45,24 +47,23 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   }, [notify]);
 
   const reload = useCallback(async () => {
-    if (!user) { setLoading(false); return; }
+    if (!userId) { setLoading(false); return; }
     setLoading(true);
     const [txResult, goalResult, settingsResult] = await Promise.all([
-      supabase.from("transactions").select("*").eq("user_id", user.id).order("date", { ascending:false }),
-      supabase.from("goals").select("*").eq("user_id", user.id).order("created_at", { ascending:false }),
-      supabase.from("user_settings").select("*").eq("user_id", user.id).maybeSingle(),
+      supabase.from("transactions").select("*").eq("user_id", userId).order("date", { ascending:false }),
+      supabase.from("goals").select("*").eq("user_id", userId).order("created_at", { ascending:false }),
+      supabase.from("user_settings").select("*").eq("user_id", userId).maybeSingle(),
     ]);
     const error = txResult.error ?? goalResult.error ?? settingsResult.error;
     if (error) { fail(error.message); setLoading(false); return; }
     if (!settingsResult.data) {
-      const fullName = String(user.user_metadata.full_name ?? user.user_metadata.name ?? "");
-      const { error: insertError } = await supabase.from("user_settings").insert({ user_id:user.id, full_name:fullName, monthly_budget:0, demo_seeded:false });
+      const { error: insertError } = await supabase.from("user_settings").insert({ user_id:userId, full_name:userFullName, monthly_budget:0, demo_seeded:false });
       if (insertError) fail(insertError.message);
     } else setBudgetState(Number(settingsResult.data.monthly_budget ?? 0));
     setTransactions(((txResult.data ?? []) as TransactionRow[]).map(toTransaction));
     setGoals(((goalResult.data ?? []) as GoalRow[]).map(toGoal));
     setLoading(false);
-  }, [user, fail]);
+  }, [userId, userFullName, fail]);
   useEffect(() => { void reload(); }, [reload]);
   useEffect(() => { localStorage.setItem("vertex-hub-dark", String(dark)); document.documentElement.classList.toggle("dark", dark); }, [dark]);
 
