@@ -1,8 +1,28 @@
 import type { ChartMode, Period, Transaction } from "../types";
 
+export const toLocalDateInputValue = (date = new Date()) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
 export const parseLocalDate = (value: string) => {
-  const [year, month, day] = value.split("-").map(Number);
-  return new Date(year, month - 1, day, 12);
+  const normalized = String(value ?? "").trim();
+  const isoMatch = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  const brMatch = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  const parts = isoMatch
+    ? [Number(isoMatch[1]), Number(isoMatch[2]), Number(isoMatch[3])]
+    : brMatch
+      ? [Number(brMatch[3]), Number(brMatch[2]), Number(brMatch[1])]
+      : null;
+  if (!parts) return new Date(Number.NaN);
+  const [year, month, day] = parts;
+  const date = new Date(year, month - 1, day, 12);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
+    ? date
+    : new Date(Number.NaN);
+};
+
+export const normalizeLocalDateValue = (value: string) => {
+  const date = parseLocalDate(value);
+  return Number.isNaN(date.getTime()) ? value : toLocalDateInputValue(date);
 };
 const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -31,7 +51,7 @@ export function getPeriodRanges(period: Period, now = new Date()) {
 
 export const inRange = (transaction: Transaction, start: Date, end: Date) => {
   const date = parseLocalDate(transaction.date);
-  return date >= start && date <= new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23, 59, 59);
+  return !Number.isNaN(date.getTime()) && date >= start && date <= new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23, 59, 59);
 };
 
 export function groupTransactions(transactions: Transaction[], mode: ChartMode, start: Date, end: Date) {
@@ -56,6 +76,7 @@ export function groupTransactions(transactions: Transaction[], mode: ChartMode, 
   }
   transactions.forEach(transaction => {
     const date = parseLocalDate(transaction.date);
+    if (Number.isNaN(date.getTime()) || !Number.isFinite(transaction.amount)) return;
     let bucketDate = new Date(date);
     if (mode === "weekly") { const day = bucketDate.getDay() || 7; bucketDate.setDate(bucketDate.getDate() - day + 1); }
     else if (mode === "monthly") bucketDate = new Date(bucketDate.getFullYear(), bucketDate.getMonth(), 1);

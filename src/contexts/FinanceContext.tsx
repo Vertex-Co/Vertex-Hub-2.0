@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { useHiddenValuesState } from "../hooks/useHiddenValues";
 import { supabase } from "../services/supabase";
 import type { Goal, Transaction } from "../types";
+import { normalizeLocalDateValue } from "../utils/dateRanges";
 import { uid } from "../utils/format";
 import { useAuth } from "./AuthContext";
 
@@ -21,7 +22,7 @@ type FinanceContextValue = {
 };
 type TransactionRow = { id:string; description:string; amount:number|string; type:Transaction["type"]; category:string; date:string; payment_method:string; status:Transaction["status"]; notes:string|null; created_at:string };
 type GoalRow = { id:string; name:string; target_amount:number|string; current_amount:number|string; deadline:string; created_at:string };
-const toTransaction = (row: TransactionRow): Transaction => ({ id:row.id, description:row.description, amount:Number(row.amount), type:row.type, category:row.category, date:row.date, paymentMethod:row.payment_method, status:row.status, notes:row.notes ?? undefined, createdAt:row.created_at });
+const toTransaction = (row: TransactionRow): Transaction => ({ id:row.id, description:row.description, amount:Number(row.amount), type:row.type, category:row.category, date:normalizeLocalDateValue(row.date), paymentMethod:row.payment_method, status:row.status, notes:row.notes ?? undefined, createdAt:row.created_at });
 const toGoal = (row: GoalRow): Goal => ({ id:row.id, name:row.name, targetAmount:Number(row.target_amount), currentAmount:Number(row.current_amount), deadline:row.deadline, createdAt:row.created_at });
 const FinanceContext = createContext<FinanceContextValue | null>(null);
 
