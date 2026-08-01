@@ -11,3 +11,6 @@
 | RLS | Código concluído | Homologar com duas contas |
 | Logs | Base concluída | Criação de empresa registrada; ampliar triggers futuramente |
 | Vercel | Preparado | Deploy deliberadamente manual |
+| Backoffice SaaS | Concluído | Requer migration 202608010003 |
+| Planos e limites | Concluído | Free padrão; upgrades manuais e opcionais |
+| CMS, flags, notificações e suporte | Concluído | Conteúdo público dinâmico ainda parcial |

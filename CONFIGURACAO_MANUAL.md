@@ -53,6 +53,10 @@ Nunca exponha `service_role`, senha do banco, Client Secret do Google, tokens pe
 
 Para habilitar Windows Hello, Face ID, Touch ID, PIN e chaves WebAuthn, siga `docs/PASSKEYS_SETUP.md`. Defina o RP ID definitivo antes que usuários cadastrem chaves.
 
+## Backoffice SaaS
+
+Execute também `supabase/migrations/202608010003_saas_backoffice.sql` e siga `docs/ADMIN_BACKOFFICE.md`. Saia e entre novamente após aplicar a migration.
+
 ## 9. Checklist
 
 - [ ] Cadastro, confirmação, login, recuperação e logout funcionam
