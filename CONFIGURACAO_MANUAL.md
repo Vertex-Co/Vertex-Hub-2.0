@@ -57,6 +57,10 @@ Para habilitar Windows Hello, Face ID, Touch ID, PIN e chaves WebAuthn, siga `do
 
 Execute também `supabase/migrations/202608010003_saas_backoffice.sql` e siga `docs/ADMIN_BACKOFFICE.md`. Saia e entre novamente após aplicar a migration.
 
+## Usuários, Termos e planos por período
+
+Depois da migration 003, execute `supabase/migrations/202608010004_user_management_terms_plans.sql`. Publique também a Edge Function `user-admin` conforme `docs/USER_MANAGEMENT_AND_PLANS.md`.
+
 ## 9. Checklist
 
 - [ ] Cadastro, confirmação, login, recuperação e logout funcionam
