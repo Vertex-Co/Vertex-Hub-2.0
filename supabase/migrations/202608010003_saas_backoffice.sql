@@ -1,4 +1,10 @@
 -- Vertex Hub SaaS Backoffice: planos, RBAC empresarial, CMS, flags, suporte e auditoria.
+-- Policies antigas que dependem de company_members.role precisam ser removidas
+-- antes da conversão enum -> text. Elas são recriadas com regras mais estritas abaixo.
+drop policy if exists companies_update on public.companies;
+drop policy if exists profiles_select on public.profiles;
+drop policy if exists members_select on public.company_members;
+drop policy if exists logs_select on public.activity_logs;
 alter table public.company_members alter column role type text using role::text;
 alter table public.company_members drop constraint if exists company_members_role_check;
 alter table public.company_members add constraint company_members_role_check check(role in('company_owner','admin','manager','financial','employee','viewer','member'));
