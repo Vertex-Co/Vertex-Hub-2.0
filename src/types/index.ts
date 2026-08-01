@@ -9,7 +9,11 @@ export type Goal = {
   id: string; name: string; targetAmount: number; currentAmount: number;
   deadline: string; createdAt: string;
 };
-export type Page = "dashboard" | "transactions" | "reports" | "budgets" | "goals" | "settings";
+export type GlobalRole = "super_admin" | "admin" | "user";
+export type CompanyRole = "company_owner" | "member";
+export type Profile = { userId:string; fullName:string; email:string; phone?:string; cpf?:string; avatarUrl?:string; globalRole:GlobalRole; onboardingCompleted:boolean };
+export type Company = { id:string; name:string; legalName?:string; cnpj:string; phone?:string; email?:string; logoUrl?:string; status:"active"|"inactive"; createdAt:string; ownerName?:string };
+export type Page = "dashboard" | "transactions" | "reports" | "budgets" | "goals" | "settings" | "companies" | "company-details";
 export type Period = "7" | "30" | "month" | "year";
 export type ChartMode = "daily" | "weekly" | "monthly";
 export type CategoryBudget = {

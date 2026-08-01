@@ -5,6 +5,7 @@ import type { Goal, Transaction } from "../types";
 import { normalizeLocalDateValue } from "../utils/dateRanges";
 import { uid } from "../utils/format";
 import { useAuth } from "./AuthContext";
+import { useCompany } from "./CompanyContext";
 
 type Toast = { id: string; message: string; kind: "success" | "error" };
 type SaveResult = { ok: true } | { ok: false; error: string };
@@ -28,8 +29,9 @@ const FinanceContext = createContext<FinanceContextValue | null>(null);
 
 export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const { activeCompany } = useCompany();
+  const companyId = activeCompany?.id;
   const userId = user?.id;
-  const userFullName = String(user?.user_metadata.full_name ?? user?.user_metadata.name ?? "");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [budget, setBudgetState] = useState(0);
@@ -47,33 +49,30 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   }, [notify]);
 
   const reload = useCallback(async () => {
-    if (!userId) { setLoading(false); return; }
+    if (!userId || !companyId) { setTransactions([]); setGoals([]); setLoading(false); return; }
     setLoading(true);
     const [txResult, goalResult, settingsResult] = await Promise.all([
-      supabase.from("transactions").select("*").eq("user_id", userId).order("date", { ascending:false }),
-      supabase.from("goals").select("*").eq("user_id", userId).order("created_at", { ascending:false }),
-      supabase.from("user_settings").select("*").eq("user_id", userId).maybeSingle(),
+      supabase.from("transactions").select("*").eq("company_id", companyId).order("date", { ascending:false }),
+      supabase.from("goals").select("*").eq("company_id", companyId).order("created_at", { ascending:false }),
+      supabase.from("company_settings").select("*").eq("company_id", companyId).maybeSingle(),
     ]);
     const error = txResult.error ?? goalResult.error ?? settingsResult.error;
     if (error) { fail(error.message); setLoading(false); return; }
-    if (!settingsResult.data) {
-      const { error: insertError } = await supabase.from("user_settings").insert({ user_id:userId, full_name:userFullName, monthly_budget:0, demo_seeded:false });
-      if (insertError) fail(insertError.message);
-    } else setBudgetState(Number(settingsResult.data.monthly_budget ?? 0));
+    setBudgetState(Number(settingsResult.data?.monthly_budget ?? 0));
     setTransactions(((txResult.data ?? []) as TransactionRow[]).map(toTransaction));
     setGoals(((goalResult.data ?? []) as GoalRow[]).map(toGoal));
     setLoading(false);
-  }, [userId, userFullName, fail]);
+  }, [userId, companyId, fail]);
   useEffect(() => { void reload(); }, [reload]);
   useEffect(() => { localStorage.setItem("vertex-hub-dark", String(dark)); document.documentElement.classList.toggle("dark", dark); }, [dark]);
 
   const value = useMemo<FinanceContextValue>(() => ({
     transactions, goals, budget, dark, hiddenValues, setHiddenValues, toasts, loading, notify,
     saveTransaction: async (data, id) => {
-      if (!user) return { ok:false, error:"Sua sessão expirou. Entre novamente para salvar a transação." };
+      if (!user || !companyId) return { ok:false, error:"Nenhuma empresa ativa foi selecionada." };
       try {
-        const row = { user_id:user.id, description:data.description.trim(), amount:data.amount, type:data.type, category:data.category, date:data.date, payment_method:data.paymentMethod, status:data.status, notes:data.notes?.trim() || null };
-        const query = id ? supabase.from("transactions").update(row).eq("id", id).eq("user_id", user.id).select("*").single() : supabase.from("transactions").insert(row).select("*").single();
+        const row = { user_id:user.id, company_id:companyId, created_by:user.id, description:data.description.trim(), amount:data.amount, type:data.type, category:data.category, date:data.date, payment_method:data.paymentMethod, status:data.status, notes:data.notes?.trim() || null };
+        const query = id ? supabase.from("transactions").update(row).eq("id", id).eq("company_id",companyId).select("*").single() : supabase.from("transactions").insert(row).select("*").single();
         const { data:saved, error } = await query;
         if (error) {
           if (import.meta.env.DEV) console.error("[Vertex Hub] Falha ao salvar transação", error);
@@ -101,34 +100,34 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       }
     },
     deleteTransaction: async id => {
-      if (!user) return; const { error } = await supabase.from("transactions").delete().eq("id", id).eq("user_id", user.id); if (error) return fail(error.message);
+      if (!user||!companyId) return; const { error } = await supabase.from("transactions").delete().eq("id", id).eq("company_id",companyId); if (error) return fail(error.message);
       setTransactions(current => current.filter(item => item.id !== id)); notify("Transação excluída");
     },
     duplicateTransaction: async id => {
       const source = transactions.find(item => item.id === id); if (!source || !user) return;
       const { id:_id, createdAt:_createdAt, paymentMethod, ...item } = source;
-      const { data, error } = await supabase.from("transactions").insert({ user_id:user.id, ...item, description:`${item.description} (cópia)`, payment_method:paymentMethod }).select("*").single();
+      const { data, error } = await supabase.from("transactions").insert({ user_id:user.id,company_id:companyId,created_by:user.id, ...item, description:`${item.description} (cópia)`, payment_method:paymentMethod }).select("*").single();
       if (error) return fail(error.message); setTransactions(current => [toTransaction(data as TransactionRow), ...current]); notify("Transação duplicada");
     },
     saveGoal: async (data, id) => {
-      if (!user) return; const row = { user_id:user.id, name:data.name, target_amount:data.targetAmount, current_amount:data.currentAmount, deadline:data.deadline };
-      const query = id ? supabase.from("goals").update(row).eq("id", id).eq("user_id", user.id).select("*").single() : supabase.from("goals").insert(row).select("*").single();
+      if (!user||!companyId) return; const row = { user_id:user.id,company_id:companyId,created_by:user.id, name:data.name, target_amount:data.targetAmount, current_amount:data.currentAmount, deadline:data.deadline };
+      const query = id ? supabase.from("goals").update(row).eq("id", id).eq("company_id",companyId).select("*").single() : supabase.from("goals").insert(row).select("*").single();
       const { data:saved, error } = await query; if (error) return fail(error.message); const item = toGoal(saved as GoalRow);
       setGoals(current => id ? current.map(entry => entry.id === id ? item : entry) : [item, ...current]); notify(id ? "Meta atualizada" : "Meta criada");
     },
-    deleteGoal: async id => { if (!user) return; const { error } = await supabase.from("goals").delete().eq("id", id).eq("user_id", user.id); if (error) return fail(error.message); setGoals(current => current.filter(item => item.id !== id)); notify("Meta excluída"); },
+    deleteGoal: async id => { if (!user||!companyId) return; const { error } = await supabase.from("goals").delete().eq("id", id).eq("company_id",companyId); if (error) return fail(error.message); setGoals(current => current.filter(item => item.id !== id)); notify("Meta excluída"); },
     addToGoal: async (id, amount) => {
       const goal = goals.find(item => item.id === id); if (!goal || !user) return; const currentAmount = Math.min(goal.targetAmount, goal.currentAmount + amount);
-      const { error } = await supabase.from("goals").update({ current_amount:currentAmount }).eq("id", id).eq("user_id", user.id); if (error) return fail(error.message);
+      const { error } = await supabase.from("goals").update({ current_amount:currentAmount,created_by:user.id }).eq("id", id).eq("company_id",companyId); if (error) return fail(error.message);
       setGoals(current => current.map(item => item.id === id ? { ...item, currentAmount } : item)); notify("Valor adicionado à meta");
     },
-    setBudget: async amount => { if (!user || amount < 0) return; const { error } = await supabase.from("user_settings").update({ monthly_budget:amount, updated_at:new Date().toISOString() }).eq("user_id", user.id); if (error) return fail(error.message); setBudgetState(amount); notify("Orçamento atualizado"); },
+    setBudget: async amount => { if (!user || !companyId || amount < 0) return; const { error } = await supabase.from("company_settings").update({ monthly_budget:amount, updated_at:new Date().toISOString() }).eq("company_id",companyId); if (error) return fail(error.message); setBudgetState(amount); notify("Orçamento atualizado"); },
     setDark:setDarkState,
     resetData: async () => {
-      if (!user) return; const [tx, goal] = await Promise.all([supabase.from("transactions").delete().eq("user_id", user.id), supabase.from("goals").delete().eq("user_id", user.id)]);
+      if (!user||!companyId) return; const [tx, goal] = await Promise.all([supabase.from("transactions").delete().eq("company_id",companyId), supabase.from("goals").delete().eq("company_id",companyId)]);
       const error = tx.error ?? goal.error; if (error) return fail(error.message); setTransactions([]); setGoals([]); notify("Seus dados financeiros foram apagados");
     },
-  }), [transactions, goals, budget, dark, hiddenValues, setHiddenValues, toasts, loading, notify, fail, user]);
+  }), [transactions, goals, budget, dark, hiddenValues, setHiddenValues, toasts, loading, notify, fail, user, companyId]);
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>;
 }
 export const useFinance = () => { const value = useContext(FinanceContext); if (!value) throw new Error("FinanceProvider ausente"); return value; };

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button, Input, Modal } from "../ui/Common";
-export function AmountModal({ open, title, description, initialValue = 0, allowZero = false, onClose, onConfirm }: { open:boolean; title:string; description:string; initialValue?:number; allowZero?:boolean; onClose:()=>void; onConfirm:(value:number)=>void|Promise<void> }) {
+export function AmountModal({ open, title, description = "", initialValue = 0, allowZero = false, onClose, onConfirm }: { open:boolean; title:string; description?:string; initialValue?:number; allowZero?:boolean; onClose:()=>void; onConfirm:(value:number)=>void|Promise<void> }) {
   const [value, setValue] = useState(String(initialValue || ""));
   const [busy, setBusy] = useState(false);
   useEffect(() => setValue(String(initialValue || "")), [initialValue, open]);
