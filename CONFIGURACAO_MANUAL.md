@@ -49,6 +49,10 @@ Crie **Add New > Project**, conecte somente o repositório de homologação, sel
 
 Nunca exponha `service_role`, senha do banco, Client Secret do Google, tokens pessoais ou segredos administrativos.
 
+## Passkeys
+
+Para habilitar Windows Hello, Face ID, Touch ID, PIN e chaves WebAuthn, siga `docs/PASSKEYS_SETUP.md`. Defina o RP ID definitivo antes que usuários cadastrem chaves.
+
 ## 9. Checklist
 
 - [ ] Cadastro, confirmação, login, recuperação e logout funcionam

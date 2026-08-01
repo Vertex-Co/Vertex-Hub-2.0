@@ -1,6 +1,7 @@
 import type { User } from "@supabase/supabase-js";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { isSupabaseConfigured, supabase } from "../services/supabase";
+import { signInWithPasskey as performPasskeySignIn } from "../services/passkeys";
 
 type AuthResult = { error?: string; confirmationRequired?: boolean };
 type AuthContextValue = {
@@ -10,6 +11,7 @@ type AuthContextValue = {
   signUp: (name: string, email: string, password: string) => Promise<AuthResult>;
   resetPassword: (email: string) => Promise<AuthResult>;
   signInWithGoogle: () => Promise<AuthResult>;
+  signInWithPasskey: () => Promise<AuthResult>;
   signOut: () => Promise<void>;
 };
 
@@ -68,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (message.includes("redirect")) return { error: "A URL de retorno não está autorizada. Verifique a configuração do Supabase." };
       return { error: "Não foi possível entrar com o Google. Tente novamente." };
     },
+    signInWithPasskey: performPasskeySignIn,
     signOut: async () => {
       await supabase.auth.signOut();
     },

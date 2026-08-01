@@ -1,4 +1,4 @@
-import { CircleDot, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
+import { CircleDot, Eye, EyeOff, KeyRound, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { GoogleAuthButton } from "../components/auth/GoogleAuthButton";
 import { LegalModal } from "../components/legal/LegalModal";
@@ -6,7 +6,7 @@ import { Button, Input } from "../components/ui/Common";
 import { useAuth } from "../contexts/AuthContext";
 
 export function AuthPage() {
-  const { signIn, signUp, resetPassword } = useAuth();
+  const { signIn, signUp, resetPassword, signInWithPasskey } = useAuth();
   const [mode, setMode] = useState<"login"|"register">("login");
   const [name,setName]=useState(""),[email,setEmail]=useState(""),[password,setPassword]=useState("");
   const [showPassword,setShowPassword]=useState(false),[busy,setBusy]=useState(false);
@@ -14,6 +14,7 @@ export function AuthPage() {
   const [message,setMessage]=useState<{text:string;error?:boolean}|null>(null);
   const submit=async(event:React.FormEvent)=>{event.preventDefault();if(busy)return;setMessage(null);if(password.length<6)return setMessage({text:"A senha deve ter pelo menos 6 caracteres.",error:true});setBusy(true);const result=mode==="login"?await signIn(email,password):await signUp(name.trim(),email,password);setBusy(false);if(result.error)setMessage({text:result.error.includes("Invalid login")?"E-mail ou senha incorretos.":"Não foi possível concluir. Verifique os dados e tente novamente.",error:true});else if(result.confirmationRequired)setMessage({text:"Cadastro realizado. Confirme o e-mail para entrar."});};
   const recover=async()=>{if(!email)return setMessage({text:"Informe seu e-mail primeiro.",error:true});setBusy(true);const result=await resetPassword(email);setBusy(false);setMessage(result.error?{text:"Não foi possível enviar o e-mail de recuperação.",error:true}:{text:"Enviamos as instruções de recuperação para seu e-mail."});};
+  const passkey=async()=>{if(busy)return;setBusy(true);setMessage({text:"Confirme sua identidade no dispositivo"});const result=await signInWithPasskey();setBusy(false);if(result.error)setMessage({text:result.error,error:!result.error.toLowerCase().includes("cancelada")})};
   return <main className="grid min-h-screen bg-zinc-950 text-white lg:grid-cols-[1.1fr_.9fr]">
     <section className="relative hidden overflow-hidden bg-gradient-to-br from-blue-700 via-blue-600 to-violet-700 p-14 lg:flex lg:flex-col">
       <div className="absolute -right-32 -top-32 size-[500px] rounded-full border border-white/15"/><div className="relative flex items-center gap-3 text-2xl font-black"><span className="grid size-12 place-items-center rounded-2xl bg-white text-blue-600"><CircleDot/></span><span>Vertex Hub<small className="mt-0 text-xs font-medium text-blue-100">Central de Gestão Digital</small></span></div>
@@ -23,7 +24,7 @@ export function AuthPage() {
     <section className="flex items-center justify-center p-5 sm:p-10"><div className="w-full max-w-md">
       <div className="mb-8 flex items-center gap-3 text-2xl font-black lg:hidden"><span className="grid size-11 place-items-center rounded-xl bg-blue-600"><CircleDot/></span><span>Vertex Hub<small className="mt-0 text-xs font-medium text-zinc-400">Central de Gestão Digital</small></span></div>
       <p className="text-sm font-bold text-blue-500">{mode==="login"?"BEM-VINDO DE VOLTA":"COMECE AGORA"}</p><h2 className="mt-2 text-3xl font-black">{mode==="login"?"Acesse sua conta":"Crie sua conta"}</h2><p className="mt-2 text-sm text-zinc-400">Seus dados ficam privados e sincronizados com sua conta.</p>
-      <div className="mt-7"><GoogleAuthButton onError={text=>setMessage({text,error:true})}/><div className="my-5 flex items-center gap-3 text-xs text-zinc-500"><i className="h-px flex-1 bg-zinc-800"/><span>ou continue com e-mail</span><i className="h-px flex-1 bg-zinc-800"/></div></div>
+      <div className="mt-7 space-y-3"><GoogleAuthButton onError={text=>setMessage({text,error:true})}/>{mode==="login"&&<Button type="button" variant="secondary" disabled={busy} onClick={()=>void passkey()} className="w-full border-zinc-700 bg-zinc-900"><KeyRound size={18}/>{busy?"Preparando chave de acesso...":"Entrar com chave de acesso"}</Button>}<div className="flex items-center gap-3 text-xs text-zinc-500"><i className="h-px flex-1 bg-zinc-800"/><span>ou continue com e-mail</span><i className="h-px flex-1 bg-zinc-800"/></div></div>
       <form onSubmit={submit} className="space-y-4">{mode==="register"&&<label>Nome completo<Input required value={name} onChange={e=>setName(e.target.value)} autoComplete="name"/></label>}<label>E-mail<div className="relative"><Mail className="absolute left-3 top-3.5 text-zinc-500" size={17}/><Input required type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" className="pl-10"/></div></label><label>Senha<div className="relative"><LockKeyhole className="absolute left-3 top-3.5 text-zinc-500" size={17}/><Input required minLength={6} type={showPassword?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} autoComplete={mode==="login"?"current-password":"new-password"} className="px-10"/><button aria-label={showPassword?"Ocultar senha":"Mostrar senha"} type="button" onClick={()=>setShowPassword(v=>!v)} className="absolute right-3 top-3.5 text-zinc-500">{showPassword?<EyeOff size={17}/>:<Eye size={17}/>}</button></div></label>
       {message&&<div aria-live="polite" className={`rounded-xl border p-3 text-sm ${message.error?"border-red-500/30 bg-red-500/10 text-red-400":"border-emerald-500/30 bg-emerald-500/10 text-emerald-400"}`}>{message.text}</div>}{mode==="login"&&<button type="button" disabled={busy} onClick={()=>void recover()} className="text-sm font-semibold text-blue-400">Esqueci minha senha</button>}<Button disabled={busy} type="submit" className="w-full">{busy?(mode==="login"?"Entrando...":"Criando conta..."):(mode==="login"?"Entrar na minha conta":"Criar conta")}</Button></form>
       <p className="mt-6 text-center text-sm text-zinc-400">{mode==="login"?"Ainda não tem uma conta?":"Já possui uma conta?"} <button onClick={()=>{setMode(mode==="login"?"register":"login");setMessage(null)}} className="font-bold text-blue-400">{mode==="login"?"Cadastre-se":"Entrar"}</button></p>
