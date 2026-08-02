@@ -35,7 +35,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [budget, setBudgetState] = useState(0);
-  const [dark, setDarkState] = useState(() => localStorage.getItem("vertex-hub-dark") !== "false");
+  const [dark, setDarkState] = useState(() => { const saved=localStorage.getItem("vertex-theme"); return saved?saved==="dark":matchMedia("(prefers-color-scheme: dark)").matches; });
   const { hidden: hiddenValues, setHidden: setHiddenValues } = useHiddenValuesState();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +64,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setLoading(false);
   }, [userId, companyId, fail]);
   useEffect(() => { void reload(); }, [reload]);
-  useEffect(() => { localStorage.setItem("vertex-hub-dark", String(dark)); document.documentElement.classList.toggle("dark", dark); }, [dark]);
+  useEffect(() => { localStorage.setItem("vertex-theme", dark?"dark":"light"); document.documentElement.classList.toggle("dark", dark); }, [dark]);
 
   const value = useMemo<FinanceContextValue>(() => ({
     transactions, goals, budget, dark, hiddenValues, setHiddenValues, toasts, loading, notify,

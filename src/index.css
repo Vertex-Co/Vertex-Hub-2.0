@@ -5,6 +5,10 @@
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{margin:0;min-width:320px;min-height:100vh}
+body{background:#fff;color:#18181b}.dark body{background:#09090b;color:#fafafa}
+.landing-enter{animation:landing-enter .45s ease-out both}@keyframes landing-enter{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.landing-enter{animation:none}*{transition-duration:.01ms!important}}
+html:not(.dark) main.bg-zinc-950{background:#fff;color:#18181b}html:not(.dark) main.bg-zinc-950 .bg-zinc-900{background:#f4f4f5}html:not(.dark) main.bg-zinc-950 .border-zinc-700{border-color:#d4d4d8}
 button,select{cursor:pointer}
 label{display:block;font-size:.8rem;font-weight:600;color:#71717a}
 label input,label select,label textarea{margin-top:.35rem;color:#18181b}
