@@ -10,11 +10,10 @@ export type Goal = {
   deadline: string; createdAt: string;
 };
 export type GlobalRole = "super_admin" | "admin" | "user";
-export type Profile = { userId:string; fullName:string; email:string; phone?:string; cpf?:string; avatarUrl?:string; globalRole:GlobalRole; onboardingCompleted:boolean };
+export type Profile = { userId:string; fullName:string; email:string; phone?:string; cpf?:string; avatarUrl?:string; globalRole:GlobalRole; onboardingCompleted:boolean; isAuthorized:boolean };
 export type CompanyRole = "company_owner"|"admin"|"manager"|"financial"|"employee"|"viewer"|"member";
-export type PlanId="free"|"start"|"growth"|"prime"|"enterprise";
-export type Company = { id:string; name:string; legalName?:string; cnpj?:string; phone?:string; email?:string; logoUrl?:string; status:"active"|"suspended"|"inactive"; plan:PlanId; createdAt:string; ownerName?:string; enterpriseUserLimit?:number; enterpriseStorageGb?:number; enterpriseFinancialAssistance?:boolean; enterpriseNotes?:string };
-export type Page = "dashboard"|"transactions"|"reports"|"budgets"|"goals"|"tasks"|"crm"|"documents"|"calendar"|"settings"|"plans"|"companies"|"admin-overview"|"admin-users"|"admin-resources"|"admin-keys"|"admin-content"|"admin-notifications"|"support"|"admin-audit"|"admin-security"|"admin-system"|"admin-settings";
+export type Company = { id:string; name:string; legalName?:string; cnpj?:string; phone?:string; email?:string; logoUrl?:string; status:"active"|"suspended"|"inactive"; createdAt:string; ownerName?:string };
+export type Page = "dashboard"|"transactions"|"reports"|"budgets"|"goals"|"tasks"|"crm"|"documents"|"calendar"|"settings"|"companies"|"admin-overview"|"admin-users"|"admin-resources"|"admin-keys"|"admin-content"|"admin-notifications"|"support"|"admin-audit"|"admin-security"|"admin-system"|"admin-settings";
 export type Period = "7" | "30" | "month" | "year";
 export type ChartMode = "daily" | "weekly" | "monthly";
 export type CategoryBudget = {
