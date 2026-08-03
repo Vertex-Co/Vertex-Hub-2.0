@@ -6,7 +6,7 @@ export const Button = ({children,className="",variant="primary",...props}:React.
   <button className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:opacity-50 ${variant==="primary"?"bg-blue-600 text-white hover:bg-blue-500 active:bg-blue-700":variant==="danger"?"bg-red-500/10 text-red-600 hover:bg-red-500/20 dark:text-red-400":variant==="inverted"?"border border-white/70 bg-white text-blue-700 hover:bg-blue-50":"border border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"} ${className}`} {...props}>{children}</button>;
 export const Input = (props:React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} className={`h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 dark:border-zinc-700 dark:bg-zinc-800 ${props.className??""}`}/>;
 export const Select = (props:React.SelectHTMLAttributes<HTMLSelectElement>) => <select {...props} className={`h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 ${props.className??""}`}/>;
-export function Modal({title,onClose,children}:{title:string,onClose:()=>void,children:React.ReactNode}) {
+export function Modal({title,onClose,children,panelClassName=""}:{title:string,onClose:()=>void,children:React.ReactNode,panelClassName?:string}) {
   const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -15,7 +15,7 @@ export function Modal({title,onClose,children}:{title:string,onClose:()=>void,ch
     return () => { document.removeEventListener("keydown", keydown); previous?.focus(); };
   }, [onClose]);
   return <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
-    <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="modal-title" className="max-h-[94vh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl outline-none dark:bg-zinc-900 sm:max-w-xl sm:rounded-3xl sm:p-6">
+    <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="modal-title" className={`max-h-[94vh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl outline-none dark:bg-zinc-900 sm:max-w-xl sm:rounded-3xl sm:p-6 ${panelClassName}`}>
       <div className="mb-5 flex items-center justify-between"><h2 id="modal-title" className="text-lg font-bold">{title}</h2><button aria-label="Fechar" onClick={onClose} className="rounded-lg p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800"><X size={20}/></button></div>{children}
     </div></div>;
 }

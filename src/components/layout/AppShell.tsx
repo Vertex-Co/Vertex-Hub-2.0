@@ -1,9 +1,11 @@
 import { Activity,BarChart3,Building2,CalendarDays,ChevronDown,Eye,EyeOff,FileArchive,Flag,HeartPulse,KeyRound,LayoutDashboard,LifeBuoy,ListChecks,LogOut,Menu,Moon,PiggyBank,Plus,ReceiptText,Settings,ShieldCheck,Sun,Users,X } from "lucide-react";
 import { useEffect,useMemo,useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
+import { roleLabels } from "../../config/labels";
 import { useCompany } from "../../contexts/CompanyContext";
 import { useFinance } from "../../contexts/FinanceContext";
 import { useFinancialNotifications } from "../../hooks/useFinancialNotifications";
+import { usePermissions } from "../../hooks/usePermissions";
 import { supabase } from "../../services/supabase";
 import type { FinancialNotification,Page } from "../../types";
 import { OfficialLogo } from "../brand/OfficialLogo";
@@ -19,6 +21,7 @@ export function AppShell({page,setPage,onNew,children}:{page:Page;setPage:(p:Pag
  const{user,signOut}=useAuth();
  const{activeCompany,companies,isAdmin,isSuperAdmin,companyRole,profile,selectCompany}=useCompany();
  const{dark,setDark,hiddenValues,setHiddenValues,toasts,loading,transactions,goals,budget}=useFinance();
+ const permissions=usePermissions();
  const financial=useFinancialNotifications(transactions,goals,budget);
  const[platform,setPlatform]=useState<PlatformRow[]>([]),[mobile,setMobile]=useState(false),[companyOpen,setCompanyOpen]=useState(false);
  useEffect(()=>{
@@ -43,16 +46,16 @@ export function AppShell({page,setPage,onNew,children}:{page:Page;setPage:(p:Pag
    <nav className="space-y-1">{finance.map(navItem)}</nav>
    {isAdmin&&!isSuperAdmin&&<div className="mt-6 border-t pt-4 dark:border-zinc-800"><p className="mb-2 px-3 text-[10px] font-black tracking-widest text-zinc-500">ADMINISTRAÇÃO DA EMPRESA</p>{navItem(["companies","Empresa",Building2])}{navItem(["admin-users","Usuários",Users])}</div>}
    {isSuperAdmin&&globalGroups.map(group=><div key={group.label} className="mt-6 border-t pt-4 dark:border-zinc-800"><p className="mb-2 px-3 text-[10px] font-black tracking-widest text-zinc-500">{group.label}</p>{group.items.map(navItem)}</div>)}
-   <div className="mt-7 border-t pt-4 dark:border-zinc-800"><p className="truncate font-semibold">{name}</p><p className="truncate text-xs text-zinc-500">{isSuperAdmin?"Super Administrador":companyRole??"membro"}</p><button onClick={()=>void signOut()} className="mt-3 flex items-center gap-2 text-sm text-zinc-500"><LogOut size={17}/>Sair</button></div>
+   <div className="mt-7 border-t pt-4 dark:border-zinc-800"><p className="truncate font-semibold">{name}</p><p className="truncate text-xs text-zinc-500">{isSuperAdmin?"Super Administrador":roleLabels[companyRole??"member"]}</p><button onClick={()=>void signOut()} className="mt-3 flex items-center gap-2 text-sm text-zinc-500"><LogOut size={17}/>Sair</button></div>
   </aside>
   {mobile&&<button className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={()=>setMobile(false)}/>}
   <main className="min-h-screen lg:pl-72"><header className="sticky top-0 z-20 border-b bg-zinc-100/85 px-4 py-3 backdrop-blur-xl transition-colors dark:border-zinc-800 dark:bg-zinc-950/85"><div className="mx-auto flex max-w-[1500px] items-center gap-2 sm:gap-3">
-   <button className="rounded-xl border p-2 lg:hidden" onClick={()=>setMobile(true)}><Menu/></button><div className="mr-auto"><h1 className="font-bold">Olá, {name.split(" ")[0]}</h1><p className="text-xs text-zinc-500">{loading?"Sincronizando...":"Central de Gestão Digital"}</p></div>
+   <button className="rounded-xl border p-2 lg:hidden" onClick={()=>setMobile(true)}><Menu/></button><div className="mr-auto"><h1 className="font-bold">Olá, {name.split(" ")[0]}</h1><p className="text-xs text-zinc-500">{loading?"Sincronizando...":permissions.isReadOnly?"Acesso somente leitura":"Central de Gestão Digital"}</p></div>
    <button aria-label="Alternar tema" onClick={()=>setDark(!dark)} className="relative flex h-9 w-[70px] items-center justify-between rounded-full border bg-white px-2 text-zinc-500 transition dark:border-zinc-700 dark:bg-zinc-900"><Sun size={15}/><Moon size={15}/><i className={`absolute top-1 size-7 rounded-full bg-blue-600 shadow transition-transform ${dark?"translate-x-7":"-translate-x-1"}`}/></button>
    <NotificationCenter items={notifications} onNavigate={go}/>
    <button aria-label="Ocultar valores" onClick={()=>setHiddenValues(!hiddenValues)} className="rounded-xl border bg-white p-2.5 dark:border-zinc-700 dark:bg-zinc-900">{hiddenValues?<EyeOff size={18}/>:<Eye size={18}/>}</button>
    {activeCompany&&<div className="relative hidden md:block"><button onClick={()=>setCompanyOpen(!companyOpen)} className="flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-left dark:border-zinc-700 dark:bg-zinc-900"><Building2 size={17}/><span><small className="m-0 text-[9px] uppercase text-zinc-500">Visualizando</small><b className="block max-w-36 truncate text-xs">{activeCompany.name}</b></span>{isSuperAdmin&&<ChevronDown size={15}/>}</button>{companyOpen&&isSuperAdmin&&<div className="absolute right-0 top-12 w-64 rounded-2xl border bg-white p-2 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">{companies.map(company=><button key={company.id} onClick={()=>{selectCompany(company.id);setCompanyOpen(false)}} className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800">{company.name}{company.id===activeCompany.id&&<span className="block text-xs text-blue-500">Empresa atual</span>}</button>)}</div>}</div>}
-   <Button onClick={onNew}><Plus size={18}/><span className="hidden xl:inline">Nova transação</span></Button>
+   {permissions.canWrite&&<Button onClick={onNew}><Plus size={18}/><span className="hidden xl:inline">Nova transação</span></Button>}
   </div></header>{activeCompany?.status==="suspended"&&!isSuperAdmin&&<div className="bg-red-500 px-4 py-3 text-center text-sm font-bold text-white">Esta empresa está suspensa. Os dados foram preservados.</div>}<div className="mx-auto max-w-[1500px] p-4 pb-24 sm:p-7">{children}<AppFooter/></div></main>
   <div className="fixed right-4 top-20 z-[60] space-y-2">{toasts.map(toast=><div key={toast.id} className={`rounded-xl px-4 py-3 text-sm font-semibold text-white ${toast.kind==="error"?"bg-red-500":"bg-emerald-500"}`}>{toast.message}</div>)}</div>
  </div>

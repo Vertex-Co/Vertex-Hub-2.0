@@ -1,0 +1,10 @@
+import { readFileSync } from "node:fs";
+const read=path=>readFileSync(path,"utf8");
+const migration=read("supabase/migrations/202608030004_employee_read_only_rls.sql"),permissions=read("src/hooks/usePermissions.ts"),workspace=read("src/pages/WorkspaceModules.tsx"),legal=read("src/components/legal/TermsContent.tsx"),auth=read("src/pages/Auth.tsx");
+for(const table of ["transactions","goals","category_budgets"])for(const action of ["read","write_insert","write_update","write_delete"])if(!migration.includes(`${table}_${action}`))throw new Error(`Policy ausente: ${table}_${action}`);
+for(const marker of ["role in('company_owner','admin')","is_company_member(company_id)","is_company_writer(company_id)"])if(!migration.includes(marker))throw new Error(`Regra RLS ausente: ${marker}`);
+if(!permissions.includes('companyRole==="admin"')||!permissions.includes('companyRole==="company_owner"'))throw new Error("Matriz frontend incompleta.");
+for(const label of ["Reunião","Agendamento","Pagamento","Recibo","Contatado","Proposta","Negociação","Cliente"])if(!workspace.includes(label)&&!read("src/config/labels.ts").includes(label))throw new Error(`Tradução ausente: ${label}`);
+for(const topic of ["LGPD","Direitos dos titulares","Passkeys","Chaves de ativação","Propriedade intelectual"])if(!legal.includes(topic))throw new Error(`Documento legal incompleto: ${topic}`);
+if(!auth.includes('current-password')||!auth.includes('new-password')||!auth.includes('type="button"'))throw new Error("Campo de senha sem requisitos de acessibilidade.");
+console.log("Permissões, traduções, documentos e senha: verificações estruturais aprovadas.");

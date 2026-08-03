@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useHiddenValuesState } from "../hooks/useHiddenValues";
+import { usePermissions } from "../hooks/usePermissions";
 import { supabase } from "../services/supabase";
 import type { Goal, Transaction } from "../types";
 import { normalizeLocalDateValue } from "../utils/dateRanges";
@@ -28,6 +29,7 @@ const toGoal = (row: GoalRow): Goal => ({ id:row.id, name:row.name, targetAmount
 const FinanceContext = createContext<FinanceContextValue | null>(null);
 
 export function FinanceProvider({ children }: { children: React.ReactNode }) {
+  const permissions = usePermissions();
   const { user } = useAuth();
   const { activeCompany } = useCompany();
   const companyId = activeCompany?.id;
@@ -69,6 +71,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<FinanceContextValue>(() => ({
     transactions, goals, budget, dark, hiddenValues, setHiddenValues, toasts, loading, notify,
     saveTransaction: async (data, id) => {
+      if (!permissions.canWrite) return { ok:false, error:"Você não possui permissão para realizar esta ação." };
       if (!user || !companyId) return { ok:false, error:"Nenhuma empresa ativa foi selecionada." };
       try {
         const row = { user_id:user.id, company_id:companyId, created_by:user.id, description:data.description.trim(), amount:data.amount, type:data.type, category:data.category, date:data.date, payment_method:data.paymentMethod, status:data.status, notes:data.notes?.trim() || null };
@@ -100,34 +103,39 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       }
     },
     deleteTransaction: async id => {
+      if (!permissions.canWrite) return notify("Você não possui permissão para realizar esta ação.","error");
       if (!user||!companyId) return; const { error } = await supabase.from("transactions").delete().eq("id", id).eq("company_id",companyId); if (error) return fail(error.message);
       setTransactions(current => current.filter(item => item.id !== id)); notify("Transação excluída");
     },
     duplicateTransaction: async id => {
+      if (!permissions.canWrite) return notify("Você não possui permissão para realizar esta ação.","error");
       const source = transactions.find(item => item.id === id); if (!source || !user) return;
       const { id:_id, createdAt:_createdAt, paymentMethod, ...item } = source;
       const { data, error } = await supabase.from("transactions").insert({ user_id:user.id,company_id:companyId,created_by:user.id, ...item, description:`${item.description} (cópia)`, payment_method:paymentMethod }).select("*").single();
       if (error) return fail(error.message); setTransactions(current => [toTransaction(data as TransactionRow), ...current]); notify("Transação duplicada");
     },
     saveGoal: async (data, id) => {
+      if (!permissions.canWrite) return notify("Você não possui permissão para realizar esta ação.","error");
       if (!user||!companyId) return; const row = { user_id:user.id,company_id:companyId,created_by:user.id, name:data.name, target_amount:data.targetAmount, current_amount:data.currentAmount, deadline:data.deadline };
       const query = id ? supabase.from("goals").update(row).eq("id", id).eq("company_id",companyId).select("*").single() : supabase.from("goals").insert(row).select("*").single();
       const { data:saved, error } = await query; if (error) return fail(error.message); const item = toGoal(saved as GoalRow);
       setGoals(current => id ? current.map(entry => entry.id === id ? item : entry) : [item, ...current]); notify(id ? "Meta atualizada" : "Meta criada");
     },
-    deleteGoal: async id => { if (!user||!companyId) return; const { error } = await supabase.from("goals").delete().eq("id", id).eq("company_id",companyId); if (error) return fail(error.message); setGoals(current => current.filter(item => item.id !== id)); notify("Meta excluída"); },
+    deleteGoal: async id => { if (!permissions.canWrite)return notify("Você não possui permissão para realizar esta ação.","error");if (!user||!companyId) return; const { error } = await supabase.from("goals").delete().eq("id", id).eq("company_id",companyId); if (error) return fail(error.message); setGoals(current => current.filter(item => item.id !== id)); notify("Meta excluída"); },
     addToGoal: async (id, amount) => {
+      if (!permissions.canWrite)return notify("Você não possui permissão para realizar esta ação.","error");
       const goal = goals.find(item => item.id === id); if (!goal || !user) return; const currentAmount = Math.min(goal.targetAmount, goal.currentAmount + amount);
       const { error } = await supabase.from("goals").update({ current_amount:currentAmount,created_by:user.id }).eq("id", id).eq("company_id",companyId); if (error) return fail(error.message);
       setGoals(current => current.map(item => item.id === id ? { ...item, currentAmount } : item)); notify("Valor adicionado à meta");
     },
-    setBudget: async amount => { if (!user || !companyId || amount < 0) return; const { error } = await supabase.from("company_settings").update({ monthly_budget:amount, updated_at:new Date().toISOString() }).eq("company_id",companyId); if (error) return fail(error.message); setBudgetState(amount); notify("Orçamento atualizado"); },
+    setBudget: async amount => { if (!permissions.canWrite)return notify("Você não possui permissão para realizar esta ação.","error");if (!user || !companyId || amount < 0) return; const { error } = await supabase.from("company_settings").update({ monthly_budget:amount, updated_at:new Date().toISOString() }).eq("company_id",companyId); if (error) return fail(error.message); setBudgetState(amount); notify("Orçamento atualizado"); },
     setDark:setDarkState,
     resetData: async () => {
+      if (!permissions.canWrite)return notify("Você não possui permissão para realizar esta ação.","error");
       if (!user||!companyId) return; const [tx, goal] = await Promise.all([supabase.from("transactions").delete().eq("company_id",companyId), supabase.from("goals").delete().eq("company_id",companyId)]);
       const error = tx.error ?? goal.error; if (error) return fail(error.message); setTransactions([]); setGoals([]); notify("Seus dados financeiros foram apagados");
     },
-  }), [transactions, goals, budget, dark, hiddenValues, setHiddenValues, toasts, loading, notify, fail, user, companyId]);
+  }), [transactions, goals, budget, dark, hiddenValues, setHiddenValues, toasts, loading, notify, fail, user, companyId, permissions.canWrite]);
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>;
 }
 export const useFinance = () => { const value = useContext(FinanceContext); if (!value) throw new Error("FinanceProvider ausente"); return value; };
