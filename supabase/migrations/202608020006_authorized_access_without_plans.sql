@@ -18,9 +18,12 @@ drop function if exists public.enforce_company_member_limit();
 create unique index if not exists activation_keys_key_hash_uidx on public.activation_keys(key_hash) where key_hash is not null;
 create index if not exists activation_keys_company_status_idx on public.activation_keys(company_id,status);
 
-create or replace function public.is_super_admin()
+-- Preserve the original signature. Its default argument already permits calls
+-- without parameters; adding a second zero-argument overload makes
+-- `is_super_admin()` ambiguous in policies and RPC functions.
+create or replace function public.is_super_admin(uid uuid default auth.uid())
 returns boolean language sql stable security definer set search_path=public as $$
-  select exists(select 1 from public.profiles p where p.user_id=auth.uid() and p.global_role='super_admin');
+  select exists(select 1 from public.profiles p where p.user_id=uid and p.global_role='super_admin');
 $$;
 
 create or replace function public.admin_create_activation_key(p_company_id uuid)
