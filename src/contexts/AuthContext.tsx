@@ -28,10 +28,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     supabase.auth.getSession().then(({ data }) => {
       setUser(data.session?.user ?? null);
+      if (data.session) void supabase.rpc("record_login_activity");
       setLoading(false);
     });
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
+      if (session && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) setTimeout(() => void supabase.rpc("record_login_activity"), 0);
       setLoading(false);
     });
     return () => data.subscription.unsubscribe();
