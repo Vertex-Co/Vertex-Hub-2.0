@@ -10,7 +10,9 @@ export type Goal = {
   deadline: string; createdAt: string;
 };
 export type GlobalRole = "super_admin" | "admin" | "user";
-export type Profile = { userId:string; fullName:string; email:string; phone?:string; cpf?:string; avatarUrl?:string; globalRole:GlobalRole; onboardingCompleted:boolean; isAuthorized:boolean };
+export type AccountType = "company"|"employee";
+export type OnboardingState = "account_created"|"account_type_selected"|"company_information"|"company_selected"|"activation_required"|"completed";
+export type Profile = { userId:string; fullName:string; email:string; phone?:string; cpf?:string; avatarUrl?:string; globalRole:GlobalRole; onboardingCompleted:boolean; isAuthorized:boolean; accountType?:AccountType; onboardingState:OnboardingState; selectedCompanyId?:string };
 export type CompanyRole = "company_owner"|"admin"|"manager"|"financial"|"employee"|"viewer"|"member";
 export type Company = { id:string; name:string; legalName?:string; cnpj?:string; phone?:string; email?:string; logoUrl?:string; status:"active"|"suspended"|"inactive"; createdAt:string; ownerName?:string };
 export type Page = "dashboard"|"transactions"|"reports"|"budgets"|"goals"|"tasks"|"crm"|"documents"|"calendar"|"settings"|"companies"|"admin-overview"|"admin-users"|"admin-resources"|"admin-keys"|"admin-content"|"admin-notifications"|"support"|"admin-audit"|"admin-security"|"admin-system"|"admin-settings";
