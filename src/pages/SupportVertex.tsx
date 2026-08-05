@@ -1,4 +1,5 @@
 import { Copy, Heart, ShieldCheck } from "lucide-react";
+import { loadMercadoPago } from "@mercadopago/sdk-js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Card, Input } from "../components/ui/Common";
 import { useCompany } from "../contexts/CompanyContext";
@@ -14,8 +15,7 @@ type Payment = {
   external_reference: string;
   amount: number;
   payment_method?: string;
-  order_status: string;
-  transaction_status?: string;
+  status: string;
   status_detail?: string;
   environment: string;
   created_at: string;
@@ -64,15 +64,15 @@ export function SupportVertex() {
   };
   const load = async () => {
     const { data } = await supabase
-      .from("support_payments")
+      .from("vertex_support_payments")
       .select(
-        "id,mercado_pago_order_id,external_reference,amount,payment_method,order_status,transaction_status,status_detail,environment,created_at",
+        "id,mercado_pago_order_id,external_reference,amount,payment_method,status,status_detail,environment,created_at",
       )
       .order("created_at", { ascending: false })
       .limit(20);
     setHistory((data ?? []) as Payment[]);
     if (isAdmin) {
-      const r = await supabase.functions.invoke("mercadopago-orders", {
+      const r = await supabase.functions.invoke("mercado-pago-create-order", {
         body: { action: "config" },
       });
       if (!r.error) setAdmin(r.data);
@@ -85,14 +85,7 @@ export function SupportVertex() {
     if (!checkout || !publicKey) return;
     let alive = true;
     const render = async () => {
-      if (!window.MercadoPago)
-        await new Promise<void>((resolve, reject) => {
-          const s = document.createElement("script");
-          s.src = "https://sdk.mercadopago.com/js/v2";
-          s.onload = () => resolve();
-          s.onerror = () => reject();
-          document.head.appendChild(s);
-        });
+      await loadMercadoPago();
       if (!alive) return;
       const mp = new window.MercadoPago(publicKey, { locale: "pt-BR" });
       brick.current = await mp
@@ -129,7 +122,7 @@ export function SupportVertex() {
               setBusy(true);
               setError("");
               const { data, error: e } = await supabase.functions.invoke(
-                "mercadopago-orders",
+                "mercado-pago-create-order",
                 {
                   body: {
                     action: "create",
@@ -148,15 +141,15 @@ export function SupportVertex() {
                 const diagnostic = data?.diagnostic_id
                   ? ` Diagnóstico: ${data.diagnostic_id}.`
                   : "";
-                const provider = data?.provider?.code
-                  ? ` Código: ${data.provider.code}.`
-                  : data?.code
-                    ? ` Código: ${data.code}.`
+                const provider = data?.provider_error?.code
+                  ? ` Código: ${data.provider_error.code}.`
+                  : data?.error_code
+                    ? ` Código: ${data.error_code}.`
                     : "";
                 setError(
                   `${data?.message ?? "Não foi possível gerar o pagamento de teste."}${provider}${diagnostic}`,
                 );
-                throw e ?? new Error(data?.code ?? data?.error);
+                throw e ?? new Error(data?.error_code ?? data?.error);
               }
               setResult(data.payment);
               await load();
@@ -180,23 +173,23 @@ export function SupportVertex() {
         "expired",
         "refunded",
         "failed",
-      ].includes(result.transaction_status ?? result.status)
+      ].includes(result.status)
     )
       return;
     const timer = setInterval(async () => {
-      const { data } = await supabase.functions.invoke("mercadopago-orders", {
+      const { data } = await supabase.functions.invoke("mercado-pago-create-order", {
         body: { action: "get", id: result.id },
       });
       if (data?.payment)
         setResult((old: any) => ({
           ...old,
           ...data.payment,
-          status: data.payment.order_status,
-          pix: data.payment.raw_safe_response,
+          status: data.payment.status,
+          safe_provider_data: data.payment.safe_provider_data,
         }));
     }, 5000);
     return () => clearInterval(timer);
-  }, [result?.id, result?.status, result?.transaction_status]);
+  }, [result?.id, result?.status]);
   useEffect(() => {
     if (!result?.transaction_id || !window.MercadoPago || !publicKey) return;
     let screen: any;
@@ -221,12 +214,12 @@ export function SupportVertex() {
     () =>
       history
         .filter(
-          (x) => x.environment === "test" && x.order_status === "approved",
+          (x) => x.environment === "test" && x.status === "approved",
         )
         .reduce((s, x) => s + Number(x.amount), 0),
     [history],
   );
-  const pix = result?.pix;
+  const pix = result?.safe_provider_data;
   return (
     <>
       <div className="mb-6">
@@ -336,29 +329,29 @@ export function SupportVertex() {
             <div className="mt-5">
               <ShieldCheck className="text-blue-500" size={36} />
               <h3 className="mt-3 text-xl font-black">
-                {label(result.transaction_status ?? result.status)}
+                {label(result.status)}
               </h3>
               <p className="text-sm text-zinc-500">
                 Pagamento de teste • R$ {chosen.toFixed(2).replace(".", ",")}
               </p>
-              {pix?.pix_qr_code_base64 && (
+              {pix?.qr_code_base64 && (
                 <img
                   className="mx-auto mt-4 max-w-64"
                   alt="QR Code Pix retornado pelo Mercado Pago"
-                  src={`data:image/png;base64,${pix.pix_qr_code_base64}`}
+                  src={`data:image/png;base64,${pix.qr_code_base64}`}
                 />
               )}{" "}
-              {pix?.pix_qr_code && (
+              {pix?.qr_code && (
                 <>
                   <textarea
                     readOnly
-                    value={pix.pix_qr_code}
+                    value={pix.qr_code}
                     className="mt-4 h-24 w-full rounded-xl border bg-transparent p-3 text-xs dark:border-zinc-700"
                   />
                   <Button
                     className="mt-2"
                     onClick={() =>
-                      void navigator.clipboard.writeText(pix.pix_qr_code)
+                      void navigator.clipboard.writeText(pix.qr_code)
                     }
                   >
                     <Copy size={16} />
@@ -419,19 +412,21 @@ export function SupportVertex() {
               <p className="mt-2 text-sm text-zinc-500">
                 Modo: <b>{admin?.mode?.toUpperCase() ?? "TESTE"}</b>
               </p>
+              <p className="mt-1 text-sm text-zinc-500">Aplicação: <b>Vertex Donate</b></p>
+              <p className="text-sm text-zinc-500">Application ID esperado: <b>6192988275087581</b></p>
               <div className="mt-3 grid gap-2 text-sm">
                 <span>
                   Public Key: {publicKey ? "Configurada" : "Não configurada"}
                 </span>
                 <span>
                   Access Token:{" "}
-                  {admin?.accessTokenConfigured
+                  {admin?.access_token_configured
                     ? "Configurado"
                     : "Não configurado"}
                 </span>
                 <span>
                   Webhook Secret:{" "}
-                  {admin?.webhookSecretConfigured
+                  {admin?.webhook_secret_configured
                     ? "Configurado"
                     : "Não configurado"}
                 </span>
@@ -445,9 +440,11 @@ export function SupportVertex() {
                     <b>{o.mercado_pago_order_id ?? "Order pendente"}</b>
                     <p>
                       {o.external_reference} • R$ {Number(o.amount).toFixed(2)}{" "}
-                      • {label(o.transaction_status ?? o.order_status)} •{" "}
+                      • {label(o.status)} •{" "}
                       {o.environment}
                     </p>
+                    <p>Método: {o.payment_method ?? "—"} • Application ID: {o.mercado_pago_application_id ?? "aguardando"}</p>
+                    <p>{o.mercado_pago_application_id === "6192988275087581" ? "✅ Credenciais pertencem à aplicação Vertex Donate" : o.mercado_pago_application_id ? "❌ Credenciais pertencem a outra aplicação" : "Validação pendente"}</p>
                     {o.mercado_pago_order_id && (
                       <button
                         className="mt-2 text-blue-500"

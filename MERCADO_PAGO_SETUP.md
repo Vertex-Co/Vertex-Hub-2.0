@@ -1,91 +1,67 @@
-# Mercado Pago — configuração do apoio voluntário
+# Vertex Donate — Mercado Pago
 
-Esta versão é exclusivamente de teste. Não use credenciais produtivas.
+Integração exclusiva da aplicação **Vertex Donate** (`Application ID 6192988275087581`), usando Checkout Transparente e API Orders. Nunca coloque credenciais no Git, no navegador ou neste documento.
 
-## 1. Credenciais de teste
+## 1. Variáveis
 
-Abra `https://www.mercadopago.com.br/developers/panel/app`, selecione a aplicação Checkout Transparente e abra **Credenciais de teste**. Copie a **Public Key** e o **Access Token de teste**. Em **Webhooks**, configure notificações de **Order** e copie a assinatura secreta de teste. Nunca envie esses valores por chat ou commit.
-
-## 2. Variáveis da Vercel
-
-Em **Vercel > vertex-hub-2-0 > Settings > Environment Variables**, adicione para Production/Preview:
+Na Vercel, em **Project > Settings > Environment Variables**, configure a Public Key da mesma aplicação:
 
 ```text
-VITE_MERCADO_PAGO_PUBLIC_KEY=<PUBLIC KEY DE TESTE>
+VITE_MERCADO_PAGO_PUBLIC_KEY=<PUBLIC_KEY>
 ```
 
-Essa é a única credencial Mercado Pago permitida no navegador. Faça um novo deploy após salvar.
-
-## 3. Migration Supabase
-
-No **Supabase Dashboard > SQL Editor > New query**, execute integralmente `supabase/migrations/202608050003_vertex_support_payments.sql`. Ela cria `support_payments`, índices, RLS e a view futura de apoiadores. Não execute apenas trechos.
-
-## 4. Secrets e deploy das Edge Functions
-
-No terminal autenticado e vinculado ao projeto:
+No Supabase `dsklsyftdpjwdbfxbqsp`, salve os secrets server-side:
 
 ```powershell
-npx.cmd supabase secrets set MERCADO_PAGO_ACCESS_TOKEN="<ACCESS TOKEN DE TESTE>"
-npx.cmd supabase secrets set MERCADO_PAGO_WEBHOOK_SECRET="<SEGREDO DO WEBHOOK DE TESTE>"
-npx.cmd supabase secrets set MERCADO_PAGO_MODE="test"
-npx.cmd supabase functions deploy mercadopago-orders
-npx.cmd supabase functions deploy mercadopago-webhook --no-verify-jwt
+npx.cmd supabase secrets set "MERCADO_PAGO_ACCESS_TOKEN=<ACCESS_TOKEN>" "MERCADO_PAGO_WEBHOOK_SECRET=<WEBHOOK_SECRET>" "MERCADO_PAGO_MODE=test" --project-ref dsklsyftdpjwdbfxbqsp
 ```
 
-`mercadopago-orders` deve manter verificação JWT. O webhook usa `--no-verify-jwt` porque o Mercado Pago não possui JWT Supabase; ele valida `x-signature` internamente.
+O limite máximo padrão é R$ 1.000. Opcionalmente configure `MERCADO_PAGO_MAX_AMOUNT` nos secrets. Nunca use `VITE_MERCADO_PAGO_ACCESS_TOKEN`.
 
-## 5. Webhook
+## 2. Banco e deploy
 
-Na aplicação do Mercado Pago, abra **Webhooks > Configurar notificações > Modo teste**. Selecione o evento **Order** e informe exatamente:
+No **Supabase Dashboard > SQL Editor**, execute integralmente `supabase/migrations/202608050004_vertex_donate_clean.sql`. A migration cria `vertex_support_payments`, RLS, índices e o resumo de recompensas. A tabela antiga não é apagada e não participa do novo fluxo.
+
+```powershell
+npx.cmd supabase functions deploy mercado-pago-create-order --project-ref dsklsyftdpjwdbfxbqsp
+npx.cmd supabase functions deploy mercado-pago-webhook --no-verify-jwt --project-ref dsklsyftdpjwdbfxbqsp
+```
+
+`mercado-pago-create-order` exige JWT Supabase. O webhook não exige JWT porque valida a assinatura HMAC oficial.
+
+## 3. Webhook
+
+No painel Mercado Pago, abra **Suas integrações > Vertex Donate > Webhooks**, selecione eventos de **Order** e use:
 
 ```text
-https://dsklsyftdpjwdbfxbqsp.supabase.co/functions/v1/mercadopago-webhook
+https://dsklsyftdpjwdbfxbqsp.supabase.co/functions/v1/mercado-pago-webhook
 ```
 
-Salve e use o simulador. Assinatura inválida retorna HTTP 401. A função consulta `GET /v1/orders/{id}` antes de atualizar o banco.
+Copie a assinatura secreta para `MERCADO_PAGO_WEBHOOK_SECRET`. O simulador deve obter HTTP 200 para assinatura válida; assinatura inválida retorna 401. A função consulta `GET /v1/orders/{id}` e confere Order ID, referência, valor, BRL, ambiente e Application ID antes de atualizar o banco.
 
-## 6. Primeira compra de teste
+## 4. Testes Pix e cartão
 
-Entre no Vertex Hub com usuário de teste, abra **Apoie a Vertex**, escolha R$ 5 ou mais e use somente dados/cartões de teste fornecidos em **Mercado Pago Developers > Contas de teste/Cartões de teste**. Para Pix, use o QR/código retornado pelo próprio Mercado Pago. Nunca use cartão real nesta fase.
+1. Confirme `MERCADO_PAGO_MODE=test` e o aviso **MODO TESTE** no Hub.
+2. Entre com um usuário Vertex e abra **Apoie a Vertex**.
+3. Pix: escolha R$ 5, selecione Pix e use somente o cenário sandbox oficial. O QR Code e o Copia e Cola devem vir da resposta da API.
+4. Cartão: use exclusivamente cartões e titulares oficiais de teste. O Payment Brick tokeniza os dados; o Vertex não recebe nem armazena número completo ou CVV.
+5. Para 3DS, siga o challenge exibido pelo componente oficial. Não simule challenge manualmente.
 
-## 7. Onde localizar o Order ID
+Se a API responder `invalid_credentials`, confira no painel da própria aplicação qual conjunto de credenciais a API Orders exige para sandbox. Não troque para cobrança real. O sistema bloqueia Application ID diferente e incompatibilidade entre `MERCADO_PAGO_MODE` e `live_mode`.
 
-Dono ou Super Admin abre **Apoie a Vertex > Integrações → Mercado Pago**. Nas últimas Orders, clique **Copiar Order ID**. O formato normalmente começa com `ORD`. O identificador também fica em `support_payments.mercado_pago_order_id`.
+## 5. Order ID, Application ID e qualidade
 
-## 8. Medição de qualidade
+Dono ou Super Admin abre **Apoie a Vertex > Integrações → Mercado Pago**. Cada registro mostra Order ID, `external_reference`, valor, status, método, ambiente e Application ID. Use **Copiar Order ID** para obter o identificador `ORD...` exigido na medição de qualidade.
 
-Cole o Order ID na ferramenta de qualidade/painel da integração Mercado Pago. Confirme idempotência, external reference `support_<UUID>`, webhook, Pix/cartão e status. Pagamentos de teste não geram badge real.
+A integração só está corretamente vinculada quando uma Order nova retorna:
 
-## 9. Credenciais de produção
+```text
+integration_data.application_id = 6192988275087581
+processing_mode = automatic
+```
 
-Não configure agora. Quando aprovado, crie secrets produtivos separados e faça revisão de segurança, fiscal e jurídica. Nunca reutilize dados de teste como produção.
+Qualquer outro ID gera `APPLICATION_MISMATCH` e nunca concede recompensa.
 
-## 10. Trocar TEST → PRODUCTION
+## 6. Produção futura
 
-Esta versão bloqueia produção no código. A troca exige uma alteração futura revisada, credenciais produtivas, migration/configuração separada, webhook produtivo e testes finais. Alterar somente a variável não habilita cobranças reais.
-
-## 11. Voltar para TEST
-
-Defina `MERCADO_PAGO_MODE=test`, restaure credenciais de teste, republique as funções e redeploye o frontend com Public Key de teste. Confirme o aviso **MODO TESTE**.
-
-## 12. Troubleshooting
-
-### Projeto e aplicação esperados
-
-Esta versão usa o projeto Supabase `dsklsyftdpjwdbfxbqsp` e aceita somente Orders TEST da aplicação Mercado Pago `2112079474766450`. Se o frontend estiver configurado com outro `VITE_SUPABASE_URL`, ele chamará Edge Functions e secrets de outro projeto. No Vercel, abra **Project Settings > Environment Variables**, confira `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` e faça um novo deploy. Nunca coloque a `service_role` no frontend.
-
-No Mercado Pago, abra **Suas integrações > aplicação 2112079474766450 > Credenciais de teste**. A Public Key do Vercel e o Access Token salvo nos Edge Function Secrets devem vir dessa mesma tela.
-
-Uma falha retorna um `diagnostic_id`, o HTTP status e um código sanitizado do provedor. Consulte os logs da função `mercadopago-orders` pelo `diagnostic_id`; os logs não incluem Authorization, tokens, dados de cartão ou secrets. Uma Order com outro `integration_data.application_id` é bloqueada com `APPLICATION_MISMATCH`.
-
-- **Public Key não configurada:** confira a variável Vite na Vercel e redeploy.
-- **integration_not_configured:** Access Token ausente nos secrets Supabase.
-- **provider_error:** veja **Supabase > Edge Functions > Logs**; o log contém somente external reference/status, nunca token/cartão.
-- **invalid_signature:** confira o segredo do webhook e se a URL/evento são do ambiente de teste.
-- **401 na criação:** sessão expirada; saia e entre novamente.
-- **Order não atualiza:** simule o webhook e confirme que o evento selecionado é Order.
-- **Pix indisponível:** confira chave Pix e meios habilitados na conta Mercado Pago.
-
-## Recompensas e Discord
-
-Badges são apenas arquitetura futura. Somente pagamentos produtivos, confirmados e não reembolsados poderão contar. TODO futuro: publicar um evento desacoplado após confirmação produtiva para sincronizar cargo Discord; a integração de pagamento não depende de Discord.
+Produção está fora do escopo inicial. Antes de habilitá-la, valide webhook, reembolso, idempotência e reconciliação; configure credenciais da mesma aplicação; altere `MERCADO_PAGO_MODE=production`; redeploye frontend/funções e execute uma revisão de segurança. Somente pagamentos `production`, `live_mode=true`, aprovados e não reembolsados contam para Supporter I–V. Early Supporter permanece desativado.
