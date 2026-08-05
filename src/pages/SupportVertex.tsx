@@ -49,6 +49,7 @@ export function SupportVertex() {
     [error, setError] = useState(""),
     [result, setResult] = useState<any>(),
     [history, setHistory] = useState<Payment[]>([]),
+    [runtime, setRuntime] = useState({mode:"test",max_amount:1000,expected_application_id:"3277123445606852"}),
     [admin, setAdmin] = useState<any>();
   const brick = useRef<any>(null),
     requestId = useRef(crypto.randomUUID());
@@ -63,6 +64,8 @@ export function SupportVertex() {
     setTimeout(() => setCheckout(true), 0);
   };
   const load = async () => {
+    const runtimeResponse = await supabase.functions.invoke("mercado-pago-create-order", {body:{action:"runtime-config"}});
+    if (!runtimeResponse.error && runtimeResponse.data?.success) setRuntime(runtimeResponse.data);
     const { data } = await supabase
       .from("vertex_support_payments")
       .select(
@@ -147,7 +150,7 @@ export function SupportVertex() {
                     ? ` Código: ${data.error_code}.`
                     : "";
                 setError(
-                  `${data?.message ?? "Não foi possível gerar o pagamento de teste."}${provider}${diagnostic}`,
+                  `${data?.message ?? "Não foi possível gerar o pagamento."}${provider}${diagnostic}`,
                 );
                 throw e ?? new Error(data?.error_code ?? data?.error);
               }
@@ -210,21 +213,21 @@ export function SupportVertex() {
     chosen >= MIN &&
     chosen <= MAX &&
     Math.round(chosen * 100) === chosen * 100;
-  const testTotal = useMemo(
+  const supportTotal = useMemo(
     () =>
       history
         .filter(
-          (x) => x.environment === "test" && x.status === "approved",
+          (x) => x.environment === runtime.mode && x.status === "approved",
         )
         .reduce((s, x) => s + Number(x.amount), 0),
-    [history],
+    [history, runtime.mode],
   );
   const pix = result?.safe_provider_data;
   return (
     <>
       <div className="mb-6">
         <p className="text-sm text-blue-500">
-          Contribuição voluntária • ambiente de testes
+          Contribuição voluntária • ambiente {runtime.mode === "production" ? "de produção" : "de testes"}
         </p>
         <h2 className="text-3xl font-black">Apoie a Vertex 💙</h2>
         <p className="mt-3 max-w-3xl text-sm text-zinc-500">
@@ -240,9 +243,8 @@ export function SupportVertex() {
       </div>
       <div className="grid items-start gap-5 xl:grid-cols-[1.1fr_.9fr]">
         <Card>
-          <div className="rounded-xl bg-amber-500/10 p-3 text-sm text-amber-600 dark:text-amber-400">
-            <b>MODO TESTE</b> — nenhuma cobrança real ou recompensa permanente
-            será concedida.
+          <div className={`rounded-xl p-3 text-sm ${runtime.mode === "production" ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400"}`}>
+            {runtime.mode === "production" ? <><b>PAGAMENTO REAL</b> — a cobrança será processada em produção.</> : <><b>MODO TESTE</b> — nenhuma cobrança real ou recompensa permanente será concedida.</>}
           </div>
           {!checkout && !result && (
             <>
@@ -306,7 +308,7 @@ export function SupportVertex() {
               </Button>
               {!publicKey && (
                 <p className="mt-3 text-sm text-red-500">
-                  Public Key de teste não configurada.
+                  Public Key não configurada.
                 </p>
               )}
             </>
@@ -332,7 +334,7 @@ export function SupportVertex() {
                 {label(result.status)}
               </h3>
               <p className="text-sm text-zinc-500">
-                Pagamento de teste • R$ {chosen.toFixed(2).replace(".", ",")}
+                Pagamento {runtime.mode === "production" ? "real" : "de teste"} • R$ {chosen.toFixed(2).replace(".", ",")}
               </p>
               {pix?.qr_code_base64 && (
                 <img
@@ -377,7 +379,7 @@ export function SupportVertex() {
                   requestId.current = crypto.randomUUID();
                 }}
               >
-                Fazer outro apoio teste
+                Fazer outro apoio
               </Button>
             </div>
           )}
@@ -397,10 +399,10 @@ export function SupportVertex() {
             <Heart className="text-blue-500" />
             <h3 className="mt-3 font-bold">Meu apoio à Vertex</h3>
             <p className="mt-3 text-2xl font-black">
-              R$ {testTotal.toFixed(2).replace(".", ",")}
+              R$ {supportTotal.toFixed(2).replace(".", ",")}
             </p>
             <p className="text-xs font-bold text-amber-500">
-              DADOS DE TESTE — não compõem saldo ou badge real.
+              {runtime.mode === "production" ? "APOIOS REAIS CONFIRMADOS NESTA LISTA." : "DADOS DE TESTE — não compõem saldo ou badge real."}
             </p>
             <p className="mt-3 text-sm text-zinc-500">
               {history.length} tentativa(s) registrada(s).

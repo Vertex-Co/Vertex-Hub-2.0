@@ -43,6 +43,8 @@ Deno.serve(async (request) => {
     const body = await request.json();
     const action = String(body.action ?? "create");
 
+    if (action === "runtime-config") return reply({ success: true, mode, max_amount: maxAmount, expected_application_id: expectedApplicationId });
+
     if (action === "config") {
       const { data: profile } = await admin.from("profiles").select("global_role,authorized_company_id").eq("user_id", user.id).single();
       let allowed = profile?.global_role === "super_admin";
