@@ -1,6 +1,6 @@
 import { Copy, Heart, ShieldCheck } from "lucide-react";
 import { loadMercadoPago } from "@mercadopago/sdk-js";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Card, Input } from "../components/ui/Common";
 import { useCompany } from "../contexts/CompanyContext";
 import { supabase } from "../services/supabase";
@@ -24,6 +24,7 @@ type Payment = {
 const MIN = 1,
   MAX = 1000,
   quick = [1, 5, 10, 25, 50, 100];
+const ACTIVE_PAYMENT_KEY = "vertex_active_support_payment";
 const label = (v?: string) =>
   ({
     created: "Aguardando pagamento",
@@ -50,7 +51,12 @@ export function SupportVertex() {
     [error, setError] = useState(""),
     [result, setResult] = useState<any>(),
     [history, setHistory] = useState<Payment[]>([]),
-    [runtime, setRuntime] = useState({mode:"test",max_amount:1000,expected_application_id:"3277123445606852"}),
+    [summary, setSummary] = useState<any>(),
+    [runtime, setRuntime] = useState({
+      mode: "test",
+      max_amount: 1000,
+      expected_application_id: "3277123445606852",
+    }),
     [admin, setAdmin] = useState<any>();
   const brick = useRef<any>(null),
     requestId = useRef(crypto.randomUUID());
@@ -64,16 +70,13 @@ export function SupportVertex() {
     setCheckout(false);
     setTimeout(() => setCheckout(true), 0);
   };
-  const synchronize = async (id:string) => {
-    setBusy(true);
-    const {data} = await supabase.functions.invoke("mercado-pago-create-order", {body:{action:"get",id}});
-    setBusy(false);
-    if (data?.success) await load();
-    else setError(data?.message ?? "Não foi possível sincronizar a Order.");
-  };
-  const load = async () => {
-    const runtimeResponse = await supabase.functions.invoke("mercado-pago-create-order", {body:{action:"runtime-config"}});
-    if (!runtimeResponse.error && runtimeResponse.data?.success) setRuntime(runtimeResponse.data);
+  const load = useCallback(async () => {
+    const runtimeResponse = await supabase.functions.invoke(
+      "mercado-pago-create-order",
+      { body: { action: "runtime-config" } },
+    );
+    if (!runtimeResponse.error && runtimeResponse.data?.success)
+      setRuntime(runtimeResponse.data);
     const { data } = await supabase
       .from("vertex_support_payments")
       .select(
@@ -82,16 +85,62 @@ export function SupportVertex() {
       .order("created_at", { ascending: false })
       .limit(20);
     setHistory((data ?? []) as Payment[]);
+    const { data: supportSummary } = await supabase
+      .from("vertex_support_summary")
+      .select(
+        "approved_count,approved_total,current_badge,next_badge,next_threshold",
+      )
+      .maybeSingle();
+    setSummary(supportSummary ?? undefined);
     if (isAdmin) {
       const r = await supabase.functions.invoke("mercado-pago-create-order", {
         body: { action: "config" },
       });
       if (!r.error) setAdmin(r.data);
     }
+  }, [isAdmin]);
+  const refreshActivePaymentStatus = useCallback(
+    async (paymentId?: string) => {
+      let storedId = paymentId;
+      if (!storedId) {
+        try {
+          storedId = JSON.parse(
+            sessionStorage.getItem(ACTIVE_PAYMENT_KEY) ?? "null",
+          )?.supportId;
+        } catch {
+          storedId = undefined;
+        }
+      }
+      if (!storedId) return;
+      const { data } = await supabase.functions.invoke(
+        "mercado-pago-create-order",
+        { body: { action: "get", id: storedId } },
+      );
+      if (data?.payment) {
+        setResult((current: any) => ({
+          ...current,
+          ...data.payment,
+          safe_provider_data:
+            data.payment.safe_provider_data ?? current?.safe_provider_data,
+        }));
+        await load();
+      }
+    },
+    [load],
+  );
+  const synchronize = async (id: string) => {
+    setBusy(true);
+    await refreshActivePaymentStatus(id);
+    setBusy(false);
   };
   useEffect(() => {
     void load();
-  }, [isAdmin]);
+    void refreshActivePaymentStatus();
+    if (import.meta.env.DEV) console.debug("PAYMENT_MOUNT");
+    return () => {
+      if (import.meta.env.DEV) console.debug("PAYMENT_UNMOUNT");
+    };
+  }, [load, refreshActivePaymentStatus]);
   useEffect(() => {
     if (!checkout || !publicKey) return;
     let alive = true;
@@ -163,6 +212,13 @@ export function SupportVertex() {
                 throw e ?? new Error(data?.error_code ?? data?.error);
               }
               setResult(data.payment);
+              sessionStorage.setItem(
+                ACTIVE_PAYMENT_KEY,
+                JSON.stringify({
+                  supportId: data.payment.id,
+                  orderId: data.payment.order_id,
+                }),
+              );
               await load();
             },
           },
@@ -187,20 +243,49 @@ export function SupportVertex() {
       ].includes(result.status)
     )
       return;
-    const timer = setInterval(async () => {
-      const { data } = await supabase.functions.invoke("mercado-pago-create-order", {
-        body: { action: "get", id: result.id },
-      });
-      if (data?.payment)
-        setResult((old: any) => ({
-          ...old,
-          ...data.payment,
-          status: data.payment.status,
-          safe_provider_data: data.payment.safe_provider_data,
-        }));
-    }, 5000);
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible")
+        void refreshActivePaymentStatus(result.id);
+    }, 7000);
     return () => clearInterval(timer);
-  }, [result?.id, result?.status]);
+  }, [result?.id, result?.status, refreshActivePaymentStatus]);
+  useEffect(() => {
+    const onVisibility = () => {
+      if (import.meta.env.DEV)
+        console.debug("VISIBILITY", document.visibilityState);
+      if (document.visibilityState === "visible")
+        void refreshActivePaymentStatus(result?.id);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [result?.id, refreshActivePaymentStatus]);
+  useEffect(() => {
+    if (!result?.id) return;
+    const channel = supabase
+      .channel(`vertex-support-${result.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "vertex_support_payments",
+          filter: `id=eq.${result.id}`,
+        },
+        (payload) => {
+          if (import.meta.env.DEV)
+            console.debug(
+              "PAYMENT_STATUS_CHANGED",
+              (payload.new as any).status,
+            );
+          setResult((current: any) => ({ ...current, ...payload.new }));
+          void load();
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [result?.id, load]);
   useEffect(() => {
     if (!result?.transaction_id || !window.MercadoPago || !publicKey) return;
     let screen: any;
@@ -235,7 +320,8 @@ export function SupportVertex() {
     <>
       <div className="mb-6">
         <p className="text-sm text-blue-500">
-          Contribuição voluntária • ambiente {runtime.mode === "production" ? "de produção" : "de testes"}
+          Contribuição voluntária • ambiente{" "}
+          {runtime.mode === "production" ? "de produção" : "de testes"}
         </p>
         <h2 className="text-3xl font-black">Apoie a Vertex 💙</h2>
         <p className="mt-3 max-w-3xl text-sm text-zinc-500">
@@ -251,8 +337,19 @@ export function SupportVertex() {
       </div>
       <div className="grid items-start gap-5 xl:grid-cols-[1.1fr_.9fr]">
         <Card>
-          <div className={`rounded-xl p-3 text-sm ${runtime.mode === "production" ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400"}`}>
-            {runtime.mode === "production" ? <><b>PAGAMENTO REAL</b> — a cobrança será processada em produção.</> : <><b>MODO TESTE</b> — nenhuma cobrança real ou recompensa permanente será concedida.</>}
+          <div
+            className={`rounded-xl p-3 text-sm ${runtime.mode === "production" ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400"}`}
+          >
+            {runtime.mode === "production" ? (
+              <>
+                <b>PAGAMENTO REAL</b> — a cobrança será processada em produção.
+              </>
+            ) : (
+              <>
+                <b>MODO TESTE</b> — nenhuma cobrança real ou recompensa
+                permanente será concedida.
+              </>
+            )}
           </div>
           {!checkout && !result && (
             <>
@@ -339,19 +436,30 @@ export function SupportVertex() {
             <div className="mt-5">
               <ShieldCheck className="text-blue-500" size={36} />
               <h3 className="mt-3 text-xl font-black">
-                {label(result.status)}
+                {result.status === "approved"
+                  ? "✅ Pagamento aprovado!"
+                  : label(result.status)}
               </h3>
+              {result.status === "approved" && (
+                <div className="mt-2">
+                  <p className="font-bold">Obrigado por apoiar a Vertex 💙</p>
+                  <p className="text-sm text-zinc-500">
+                    Seu apoio foi confirmado e seu perfil de apoiador foi atualizado.
+                  </p>
+                </div>
+              )}
               <p className="text-sm text-zinc-500">
-                Pagamento {runtime.mode === "production" ? "real" : "de teste"} • R$ {chosen.toFixed(2).replace(".", ",")}
+                Pagamento {runtime.mode === "production" ? "real" : "de teste"}{" "}
+                • R$ {Number(result.amount ?? chosen).toFixed(2).replace(".", ",")}
               </p>
-              {pix?.qr_code_base64 && (
+              {result.status !== "approved" && pix?.qr_code_base64 && (
                 <img
                   className="mx-auto mt-4 max-w-64"
                   alt="QR Code Pix retornado pelo Mercado Pago"
                   src={`data:image/png;base64,${pix.qr_code_base64}`}
                 />
               )}{" "}
-              {pix?.qr_code && (
+              {result.status !== "approved" && pix?.qr_code && (
                 <>
                   <textarea
                     readOnly
@@ -384,6 +492,7 @@ export function SupportVertex() {
                 onClick={() => {
                   setResult(undefined);
                   setCheckout(false);
+                  sessionStorage.removeItem(ACTIVE_PAYMENT_KEY);
                   requestId.current = crypto.randomUUID();
                 }}
               >
@@ -407,14 +516,40 @@ export function SupportVertex() {
             <Heart className="text-blue-500" />
             <h3 className="mt-3 font-bold">Meu apoio à Vertex</h3>
             <p className="mt-3 text-2xl font-black">
-              R$ {supportTotal.toFixed(2).replace(".", ",")}
+              R${" "}
+              {Number(
+                runtime.mode === "production"
+                  ? summary?.approved_total ?? 0
+                  : supportTotal,
+              )
+                .toFixed(2)
+                .replace(".", ",")}
             </p>
             <p className="text-xs font-bold text-amber-500">
-              {runtime.mode === "production" ? "APOIOS REAIS CONFIRMADOS NESTA LISTA." : "DADOS DE TESTE — não compõem saldo ou badge real."}
+              {runtime.mode === "production"
+                ? "APOIOS REAIS CONFIRMADOS NESTA LISTA."
+                : "DADOS DE TESTE — não compõem saldo ou badge real."}
             </p>
             <p className="mt-3 text-sm text-zinc-500">
-              {history.length} tentativa(s) registrada(s).
+              {runtime.mode === "production"
+                ? Number(summary?.approved_count ?? 0)
+                : history.length}{" "}
+              apoio(s) confirmado(s).
             </p>
+            {runtime.mode === "production" && (
+              <div className="mt-3 text-sm">
+                <p>Badge atual: <b>{summary?.current_badge ?? "Sem badge"}</b></p>
+                {summary?.next_badge && (
+                  <>
+                    <p>Próximo nível: <b>{summary.next_badge}</b></p>
+                    <p>Faltam R$ {Math.max(0, Number(summary.next_threshold) - Number(summary.approved_total)).toFixed(2).replace(".", ",")}</p>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+                      <div className="h-full bg-blue-500 transition-all" style={{ width: `${Math.min(100, Number(summary.approved_total) / Number(summary.next_threshold) * 100)}%` }} />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </Card>
           {isAdmin && (
             <Card>
@@ -422,8 +557,14 @@ export function SupportVertex() {
               <p className="mt-2 text-sm text-zinc-500">
                 Modo: <b>{admin?.mode?.toUpperCase() ?? "TESTE"}</b>
               </p>
-              <p className="mt-1 text-sm text-zinc-500">Aplicação: <b>Vertex Donate</b></p>
-              <p className="text-sm text-zinc-500">Application ID esperado em {admin?.mode?.toUpperCase() ?? "TEST"}: <b>{admin?.expected_application_id ?? "3277123445606852"}</b></p>
+              <p className="mt-1 text-sm text-zinc-500">
+                Aplicação: <b>Vertex Donate</b>
+              </p>
+              <p className="text-sm text-zinc-500">
+                Application ID esperado em{" "}
+                {admin?.mode?.toUpperCase() ?? "TEST"}:{" "}
+                <b>{admin?.expected_application_id ?? "3277123445606852"}</b>
+              </p>
               <div className="mt-3 grid gap-2 text-sm">
                 <span>
                   Public Key: {publicKey ? "Configurada" : "Não configurada"}
@@ -450,14 +591,45 @@ export function SupportVertex() {
                     <b>{o.mercado_pago_order_id ?? "Order pendente"}</b>
                     <p>
                       {o.external_reference} • R$ {Number(o.amount).toFixed(2)}{" "}
-                      • {label(o.status)} •{" "}
-                      {o.environment}
+                      • {label(o.status)} • {o.environment}
                     </p>
-                    <p>Método: {o.payment_method ?? "—"} • Application ID: {o.mercado_pago_application_id ?? "aguardando"}</p>
-                    {o.mercado_pago_user_id && <p>Conta recebedora (User ID): {o.mercado_pago_user_id}</p>}
-                    <p>{o.mercado_pago_application_id === (admin?.expected_application_id ?? "3277123445606852") ? "✅ Credenciais pertencem ao ambiente correto da Vertex Donate" : o.mercado_pago_application_id ? "❌ Credenciais pertencem a outra aplicação/ambiente" : "Validação pendente"}</p>
+                    <p>
+                      Método: {o.payment_method ?? "—"} • Application ID:{" "}
+                      {o.mercado_pago_application_id ?? "aguardando"}
+                    </p>
+                    {o.mercado_pago_user_id && (
+                      <p>
+                        Conta recebedora (User ID): {o.mercado_pago_user_id}
+                      </p>
+                    )}
+                    <p>
+                      {o.mercado_pago_application_id ===
+                      (admin?.expected_application_id ?? "3277123445606852")
+                        ? "✅ Credenciais pertencem ao ambiente correto da Vertex Donate"
+                        : o.mercado_pago_application_id
+                          ? "❌ Credenciais pertencem a outra aplicação/ambiente"
+                          : "Validação pendente"}
+                    </p>
                     {o.mercado_pago_order_id && (
-                      <div className="mt-2 flex gap-3"><button className="text-blue-500" onClick={() => void navigator.clipboard.writeText(o.mercado_pago_order_id)}>Copiar Order ID</button><button disabled={busy} className="text-blue-500" onClick={() => void synchronize(o.id)}>Sincronizar</button></div>
+                      <div className="mt-2 flex gap-3">
+                        <button
+                          className="text-blue-500"
+                          onClick={() =>
+                            void navigator.clipboard.writeText(
+                              o.mercado_pago_order_id,
+                            )
+                          }
+                        >
+                          Copiar Order ID
+                        </button>
+                        <button
+                          disabled={busy}
+                          className="text-blue-500"
+                          onClick={() => void synchronize(o.id)}
+                        >
+                          Sincronizar
+                        </button>
+                      </div>
                     )}
                   </div>
                 ))}

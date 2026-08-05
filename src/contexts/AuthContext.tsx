@@ -10,7 +10,11 @@ type AuthContextValue = {
   recoveryMode: boolean;
   finishRecovery: () => void;
   signIn: (email: string, password: string) => Promise<AuthResult>;
-  signUp: (name: string, email: string, password: string) => Promise<AuthResult>;
+  signUp: (
+    name: string,
+    email: string,
+    password: string,
+  ) => Promise<AuthResult>;
   resetPassword: (email: string) => Promise<AuthResult>;
   signInWithGoogle: () => Promise<AuthResult>;
   signInWithPasskey: () => Promise<AuthResult>;
@@ -35,55 +39,83 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (import.meta.env.DEV) console.debug("AUTH_EVENT", event);
       if (event === "PASSWORD_RECOVERY") setRecoveryMode(true);
-      setUser(session?.user ?? null);
-      if (session && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) setTimeout(() => void supabase.rpc("record_login_activity"), 0);
+      if (event === "SIGNED_OUT") setUser(null);
+      else if (event !== "TOKEN_REFRESHED" && session?.user)
+        setUser(session.user);
+      else if (event === "TOKEN_REFRESHED" && session?.user)
+        setUser((current) =>
+          current?.id === session.user.id ? current : session.user,
+        );
+      if (session && event === "SIGNED_IN")
+        setTimeout(() => void supabase.rpc("record_login_activity"), 0);
       setLoading(false);
     });
     return () => data.subscription.unsubscribe();
   }, []);
 
-  const value = useMemo<AuthContextValue>(() => ({
-    user,
-    loading,
-    recoveryMode,
-    finishRecovery: () => setRecoveryMode(false),
-    signIn: async (email, password) => {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      return error ? { error: error.message } : {};
-    },
-    signUp: async (name, email, password) => {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: name, terms_version:"1.0", terms_accepted_at:new Date().toISOString() } },
-      });
-      if (error) return { error: error.message };
-      return { confirmationRequired: !data.session };
-    },
-    resetPassword: async (email) => {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/?recovery=1`,
-      });
-      if (error && import.meta.env.DEV) console.error("[Vertex Hub] password recovery", error.message);
-      return {};
-    },
-    signInWithGoogle: async () => {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: window.location.origin },
-      });
-      if (!error) return {};
-      const message = error.message.toLowerCase();
-      if (message.includes("provider") || message.includes("unsupported")) return { error: "O acesso com Google ainda não está configurado." };
-      if (message.includes("redirect")) return { error: "A URL de retorno não está autorizada. Verifique a configuração do Supabase." };
-      return { error: "Não foi possível entrar com o Google. Tente novamente." };
-    },
-    signInWithPasskey: performPasskeySignIn,
-    signOut: async () => {
-      await supabase.auth.signOut();
-    },
-  }), [user, loading, recoveryMode]);
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      loading,
+      recoveryMode,
+      finishRecovery: () => setRecoveryMode(false),
+      signIn: async (email, password) => {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        return error ? { error: error.message } : {};
+      },
+      signUp: async (name, email, password) => {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: name,
+              terms_version: "1.0",
+              terms_accepted_at: new Date().toISOString(),
+            },
+          },
+        });
+        if (error) return { error: error.message };
+        return { confirmationRequired: !data.session };
+      },
+      resetPassword: async (email) => {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/?recovery=1`,
+        });
+        if (error && import.meta.env.DEV)
+          console.error("[Vertex Hub] password recovery", error.message);
+        return {};
+      },
+      signInWithGoogle: async () => {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: { redirectTo: window.location.origin },
+        });
+        if (!error) return {};
+        const message = error.message.toLowerCase();
+        if (message.includes("provider") || message.includes("unsupported"))
+          return { error: "O acesso com Google ainda não está configurado." };
+        if (message.includes("redirect"))
+          return {
+            error:
+              "A URL de retorno não está autorizada. Verifique a configuração do Supabase.",
+          };
+        return {
+          error: "Não foi possível entrar com o Google. Tente novamente.",
+        };
+      },
+      signInWithPasskey: performPasskeySignIn,
+      signOut: async () => {
+        await supabase.auth.signOut();
+      },
+    }),
+    [user, loading, recoveryMode],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
