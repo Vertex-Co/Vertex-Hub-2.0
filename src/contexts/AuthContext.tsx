@@ -7,6 +7,8 @@ type AuthResult = { error?: string; confirmationRequired?: boolean };
 type AuthContextValue = {
   user: User | null;
   loading: boolean;
+  recoveryMode: boolean;
+  finishRecovery: () => void;
   signIn: (email: string, password: string) => Promise<AuthResult>;
   signUp: (name: string, email: string, password: string) => Promise<AuthResult>;
   resetPassword: (email: string) => Promise<AuthResult>;
@@ -20,6 +22,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [recoveryMode, setRecoveryMode] = useState(false);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -32,6 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") setRecoveryMode(true);
       setUser(session?.user ?? null);
       if (session && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) setTimeout(() => void supabase.rpc("record_login_activity"), 0);
       setLoading(false);
@@ -42,6 +46,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthContextValue>(() => ({
     user,
     loading,
+    recoveryMode,
+    finishRecovery: () => setRecoveryMode(false),
     signIn: async (email, password) => {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       return error ? { error: error.message } : {};
@@ -57,9 +63,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     resetPassword: async (email) => {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin,
+        redirectTo: `${window.location.origin}/?recovery=1`,
       });
-      return error ? { error: error.message } : {};
+      if (error && import.meta.env.DEV) console.error("[Vertex Hub] password recovery", error.message);
+      return {};
     },
     signInWithGoogle: async () => {
       const { error } = await supabase.auth.signInWithOAuth({
@@ -76,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut: async () => {
       await supabase.auth.signOut();
     },
-  }), [user, loading]);
+  }), [user, loading, recoveryMode]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

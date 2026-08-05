@@ -1,6 +1,7 @@
 import { Bell,Eye,KeyRound,Moon,Save,ShieldCheck,Trash2 } from "lucide-react";
 import { useState } from "react";
 import { PasskeyManager } from "../components/auth/PasskeyManager";
+import { MfaSettings } from "../components/auth/MfaSettings";
 import { LegalModal } from "../components/legal/LegalModal";
 import { ConfirmModal } from "../components/modals/ConfirmModal";
 import { Button,Card,Input } from "../components/ui/Common";
@@ -18,7 +19,7 @@ export function Settings(){
   const[name,setName]=useState(profile?.fullName??String(user?.user_metadata.full_name??"")),[saving,setSaving]=useState(false),[confirmReset,setConfirmReset]=useState(false),[legal,setLegal]=useState<"privacy"|"terms"|null>(null),[preferences,setPreferences]=useState({financial:true,security:true,important:true,news:false});
   const provider=user?.app_metadata.provider??"email",avatar=profile?.avatarUrl??String(user?.user_metadata.avatar_url??"");
   const save=async()=>{if(!user||!name.trim())return;setSaving(true);const[{error:authError},{error:profileError}]=await Promise.all([supabase.auth.updateUser({data:{full_name:name.trim()}}),supabase.from("profiles").update({full_name:name.trim()}).eq("user_id",user.id)]);setSaving(false);if(!authError&&!profileError)await reload();notify(authError||profileError?"Não foi possível salvar o perfil.":"Perfil atualizado",authError||profileError?"error":"success")};
-  const sendReset=async()=>{if(!user?.email)return;const result=await resetPassword(user.email);notify(result.error?"Não foi possível enviar o e-mail.":"E-mail de redefinição enviado.",result.error?"error":"success")};
+  const sendReset=async()=>{if(!user?.email)return;await resetPassword(user.email);notify("Se existir uma conta associada a este e-mail, enviaremos as instruções.","success")};
   return <>
     <div className="mb-6"><p className="text-sm text-zinc-500">Personalize sua experiência</p><h2 className="text-3xl font-black">Configurações</h2></div>
     <div className="grid items-start gap-5 lg:grid-cols-2">
@@ -30,6 +31,7 @@ export function Settings(){
       <div className="space-y-5">
         <Card><div className="flex items-center justify-between gap-4"><div className="flex gap-3"><Moon className="shrink-0 text-blue-500"/><div><b>Aparência</b><p className="text-xs text-zinc-500">Tema claro ou escuro</p></div></div><Switch value={dark} onChange={()=>setDark(!dark)} label="Alternar tema"/></div><div className="mt-5 flex items-center justify-between gap-4 border-t pt-5 dark:border-zinc-800"><div className="flex gap-3"><Eye className="shrink-0 text-violet-500"/><div><b>Ocultar valores</b><p className="text-xs text-zinc-500">Mascarar informações financeiras</p></div></div><Switch value={hiddenValues} onChange={()=>setHiddenValues(!hiddenValues)} label="Ocultar valores"/></div></Card>
         <Card><div className="flex gap-3"><KeyRound className="shrink-0 text-amber-500"/><div><b>Segurança da conta</b><p className="mb-3 text-xs text-zinc-500">{provider==="google"?"Sua conta utiliza acesso pelo Google.":"Redefina sua senha com verificação por e-mail."}</p>{provider!=="google"&&<Button variant="secondary" onClick={()=>void sendReset()}>Enviar e-mail de redefinição</Button>}</div></div></Card>
+        <MfaSettings/>
         <PasskeyManager/>
       </div>
     </div>
