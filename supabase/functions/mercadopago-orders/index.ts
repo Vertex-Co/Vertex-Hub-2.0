@@ -42,10 +42,15 @@ Deno.serve(async (req) => {
     const url = Deno.env.get("SUPABASE_URL")!;
     const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
     const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const token = Deno.env.get("MERCADO_PAGO_ACCESS_TOKEN") ?? "";
+    const rawToken = Deno.env.get("MERCADO_PAGO_ACCESS_TOKEN") ?? "";
+    const token = rawToken.trim();
     const mode = Deno.env.get("MERCADO_PAGO_MODE") ?? "test";
     if (mode !== "test") return json({ success: false, code: "PRODUCTION_DISABLED", message: "Somente o ambiente TEST está habilitado.", diagnostic_id: diagnosticId }, 503);
     if (!token) return json({ success: false, code: "INTEGRATION_NOT_CONFIGURED", message: "Access Token não configurado no servidor.", diagnostic_id: diagnosticId }, 503);
+    if (!/^[A-Za-z0-9._-]+$/.test(token)) {
+      console.error("mp_order_invalid_token_format", { diagnosticId });
+      return json({ success: false, code: "INVALID_ACCESS_TOKEN_FORMAT", message: "O Access Token TEST foi salvo com caracteres inválidos.", diagnostic_id: diagnosticId }, 503);
+    }
 
     const authorization = req.headers.get("Authorization") ?? "";
     const caller = createClient(url, anon, { global: { headers: { Authorization: authorization } } });
@@ -142,7 +147,7 @@ Deno.serve(async (req) => {
     return json({ success: true, payment: { id, order_id: order.id, external_reference: external, application_id: applicationId, status: order.status, status_detail: order.status_detail, transaction_status: transaction.status, transaction_id: transaction.id, payment_method: transaction.payment_method?.type ?? type, environment: "test", created_at: order.date_created ?? new Date().toISOString(), pix: safe } });
   } catch (error) {
     const isTimeout = error instanceof DOMException && error.name === "AbortError";
-    console.error("mp_order_internal_error", { diagnosticId, kind: isTimeout ? "timeout" : "internal" });
+    console.error("mp_order_internal_error", { diagnosticId, kind: isTimeout ? "timeout" : "internal", errorName: error instanceof Error ? safeText(error.name, 80) : "unknown", errorMessage: error instanceof Error ? safeText(error.message, 240) : "unknown" });
     return json({ success: false, code: isTimeout ? "MERCADO_PAGO_TIMEOUT" : "INTERNAL_ERROR", message: isTimeout ? "O Mercado Pago demorou para responder." : "Erro interno ao criar o pagamento.", diagnostic_id: diagnosticId }, 500);
   }
 });
