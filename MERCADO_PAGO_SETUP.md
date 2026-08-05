@@ -16,7 +16,7 @@ No Supabase `dsklsyftdpjwdbfxbqsp`, salve os secrets server-side:
 npx.cmd supabase secrets set "MERCADO_PAGO_ACCESS_TOKEN=<ACCESS_TOKEN>" "MERCADO_PAGO_WEBHOOK_SECRET=<WEBHOOK_SECRET>" "MERCADO_PAGO_MODE=test" --project-ref dsklsyftdpjwdbfxbqsp
 ```
 
-O limite máximo padrão é R$ 1.000. Opcionalmente configure `MERCADO_PAGO_MAX_AMOUNT` nos secrets. Nunca use `VITE_MERCADO_PAGO_ACCESS_TOKEN`.
+O valor mínimo é R$ 1 e o limite máximo padrão é R$ 1.000. Opcionalmente configure `MERCADO_PAGO_MAX_AMOUNT` nos secrets. Nunca use `VITE_MERCADO_PAGO_ACCESS_TOKEN`.
 
 ## 2. Banco e deploy
 
@@ -43,7 +43,7 @@ Copie a assinatura secreta para `MERCADO_PAGO_WEBHOOK_SECRET`. O simulador deve 
 
 1. Confirme `MERCADO_PAGO_MODE=test` e o aviso **MODO TESTE** no Hub.
 2. Entre com um usuário Vertex e abra **Apoie a Vertex**.
-3. Pix: escolha R$ 5, selecione Pix e use somente o cenário sandbox oficial. O QR Code e o Copia e Cola devem vir da resposta da API.
+3. Pix: escolha R$ 1, selecione Pix e use somente o cenário sandbox oficial. O QR Code e o Copia e Cola devem vir da resposta da API.
 4. Cartão: use exclusivamente cartões e titulares oficiais de teste. O Payment Brick tokeniza os dados; o Vertex não recebe nem armazena número completo ou CVV.
 5. Para 3DS, siga o challenge exibido pelo componente oficial. Não simule challenge manualmente.
 

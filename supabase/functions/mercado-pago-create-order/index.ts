@@ -30,7 +30,7 @@ Deno.serve(async (request) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const accessToken = (Deno.env.get("MERCADO_PAGO_ACCESS_TOKEN") ?? "").trim();
     const mode = (Deno.env.get("MERCADO_PAGO_MODE") ?? "test").toLowerCase();
-    const maxAmount = Math.max(5, Math.min(100000, Number(Deno.env.get("MERCADO_PAGO_MAX_AMOUNT") ?? 1000)));
+    const maxAmount = Math.max(1, Math.min(100000, Number(Deno.env.get("MERCADO_PAGO_MAX_AMOUNT") ?? 1000)));
     if (!accessToken) return reply({ success: false, error_code: "MP_NOT_CONFIGURED", diagnostic_id: diagnosticId, message: "Access Token ausente." }, 503);
     if (!/^[A-Za-z0-9._-]+$/.test(accessToken)) return reply({ success: false, error_code: "MP_INVALID_SECRET_FORMAT", diagnostic_id: diagnosticId, message: "Access Token com formato inválido." }, 503);
     if (!['test', 'production'].includes(mode)) return reply({ success: false, error_code: "MP_INVALID_MODE", diagnostic_id: diagnosticId, message: "Modo Mercado Pago inválido." }, 503);
@@ -61,7 +61,7 @@ Deno.serve(async (request) => {
 
     const amount = Number(body.amount);
     const clientRequestId = clean(body.client_request_id, 80);
-    if (!Number.isFinite(amount) || amount < 5 || amount > maxAmount || Math.round(amount * 100) !== amount * 100 || !/^[0-9a-f-]{36}$/i.test(clientRequestId)) return reply({ success: false, error_code: "INVALID_INPUT", diagnostic_id: diagnosticId, message: `Use um valor entre R$ 5 e R$ ${maxAmount}.` }, 400);
+    if (!Number.isFinite(amount) || amount < 1 || amount > maxAmount || Math.round(amount * 100) !== amount * 100 || !/^[0-9a-f-]{36}$/i.test(clientRequestId)) return reply({ success: false, error_code: "INVALID_INPUT", diagnostic_id: diagnosticId, message: `Use um valor entre R$ 1 e R$ ${maxAmount}.` }, 400);
     const { data: existing } = await admin.from("vertex_support_payments").select("id,mercado_pago_order_id,status,status_detail,safe_provider_data").eq("user_id", user.id).eq("client_request_id", clientRequestId).maybeSingle();
     if (existing) return reply({ success: true, reused: true, payment: existing });
 

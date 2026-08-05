@@ -20,9 +20,9 @@ type Payment = {
   environment: string;
   created_at: string;
 };
-const MIN = 5,
+const MIN = 1,
   MAX = 1000,
-  quick = [5, 10, 25, 50, 100];
+  quick = [1, 5, 10, 25, 50, 100];
 const label = (v?: string) =>
   ({
     created: "Aguardando pagamento",
@@ -265,7 +265,7 @@ export function SupportVertex() {
                 Outro valor
                 <Input
                   inputMode="decimal"
-                  placeholder="Entre R$ 5 e R$ 1.000"
+                  placeholder="Entre R$ 1 e R$ 1.000"
                   value={custom}
                   onChange={(e) =>
                     setCustom(e.target.value.replace(/[^0-9,.]/g, ""))
