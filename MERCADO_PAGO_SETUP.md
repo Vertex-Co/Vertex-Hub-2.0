@@ -39,7 +39,7 @@ npx.cmd supabase functions deploy mercadopago-webhook --no-verify-jwt
 Na aplicação do Mercado Pago, abra **Webhooks > Configurar notificações > Modo teste**. Selecione o evento **Order** e informe exatamente:
 
 ```text
-https://nsoyvorifqwhaxwyqgze.supabase.co/functions/v1/mercadopago-webhook
+https://dsklsyftdpjwdbfxbqsp.supabase.co/functions/v1/mercadopago-webhook
 ```
 
 Salve e use o simulador. Assinatura inválida retorna HTTP 401. A função consulta `GET /v1/orders/{id}` antes de atualizar o banco.
