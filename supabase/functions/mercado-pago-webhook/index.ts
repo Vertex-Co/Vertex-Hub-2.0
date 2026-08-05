@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const EXPECTED_APPLICATION_ID = "6192988275087581";
+const APPLICATION_IDS = { test: "3277123445606852", production: "6192988275087581" } as const;
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const clean = (value: unknown, max = 200) => String(value ?? "").replace(/[<>\u0000-\u001f]/g, "").trim().slice(0, max);
 const hex = (buffer: ArrayBuffer) => [...new Uint8Array(buffer)].map((x) => x.toString(16).padStart(2, "0")).join("");
@@ -18,6 +18,8 @@ Deno.serve(async (request) => {
     const secret = Deno.env.get("MERCADO_PAGO_WEBHOOK_SECRET") ?? "";
     const token = (Deno.env.get("MERCADO_PAGO_ACCESS_TOKEN") ?? "").trim();
     const mode = (Deno.env.get("MERCADO_PAGO_MODE") ?? "test").toLowerCase();
+    if (!['test', 'production'].includes(mode)) return json({ success: false, error_code: "INVALID_MODE" }, 503);
+    const expectedApplicationId = APPLICATION_IDS[mode as keyof typeof APPLICATION_IDS];
     if (!secret || !token) return json({ success: false, error_code: "WEBHOOK_NOT_CONFIGURED" }, 503);
     const url = new URL(request.url);
     const body = await request.json().catch(() => ({}));
@@ -36,7 +38,7 @@ Deno.serve(async (request) => {
     const transaction = order?.transactions?.payments?.[0] ?? {};
     const applicationId = clean(order?.integration_data?.application_id, 32);
     const expectedLiveMode = mode === "production";
-    if (applicationId !== EXPECTED_APPLICATION_ID || (order.live_mode === true) !== expectedLiveMode) return json({ success: false, error_code: "ORDER_CONFIGURATION_MISMATCH" }, 409);
+    if (applicationId !== expectedApplicationId || (order.live_mode === true) !== expectedLiveMode) return json({ success: false, error_code: "ORDER_CONFIGURATION_MISMATCH" }, 409);
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: local } = await supabase.from("vertex_support_payments").select("id,amount,currency,external_reference,mercado_pago_order_id,environment").eq("external_reference", order.external_reference).eq("mercado_pago_order_id", String(order.id)).maybeSingle();

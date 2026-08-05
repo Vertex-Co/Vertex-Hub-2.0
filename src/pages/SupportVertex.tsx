@@ -413,7 +413,7 @@ export function SupportVertex() {
                 Modo: <b>{admin?.mode?.toUpperCase() ?? "TESTE"}</b>
               </p>
               <p className="mt-1 text-sm text-zinc-500">Aplicação: <b>Vertex Donate</b></p>
-              <p className="text-sm text-zinc-500">Application ID esperado: <b>6192988275087581</b></p>
+              <p className="text-sm text-zinc-500">Application ID esperado em {admin?.mode?.toUpperCase() ?? "TEST"}: <b>{admin?.expected_application_id ?? "3277123445606852"}</b></p>
               <div className="mt-3 grid gap-2 text-sm">
                 <span>
                   Public Key: {publicKey ? "Configurada" : "Não configurada"}
@@ -444,7 +444,7 @@ export function SupportVertex() {
                       {o.environment}
                     </p>
                     <p>Método: {o.payment_method ?? "—"} • Application ID: {o.mercado_pago_application_id ?? "aguardando"}</p>
-                    <p>{o.mercado_pago_application_id === "6192988275087581" ? "✅ Credenciais pertencem à aplicação Vertex Donate" : o.mercado_pago_application_id ? "❌ Credenciais pertencem a outra aplicação" : "Validação pendente"}</p>
+                    <p>{o.mercado_pago_application_id === (admin?.expected_application_id ?? "3277123445606852") ? "✅ Credenciais pertencem ao ambiente correto da Vertex Donate" : o.mercado_pago_application_id ? "❌ Credenciais pertencem a outra aplicação/ambiente" : "Validação pendente"}</p>
                     {o.mercado_pago_order_id && (
                       <button
                         className="mt-2 text-blue-500"

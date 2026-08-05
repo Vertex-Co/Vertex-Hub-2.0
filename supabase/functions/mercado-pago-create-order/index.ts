@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const EXPECTED_APPLICATION_ID = "6192988275087581";
+const APPLICATION_IDS = { test: "3277123445606852", production: "6192988275087581" } as const;
 const ORDERS_URL = "https://api.mercadopago.com/v1/orders";
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -34,6 +34,7 @@ Deno.serve(async (request) => {
     if (!accessToken) return reply({ success: false, error_code: "MP_NOT_CONFIGURED", diagnostic_id: diagnosticId, message: "Access Token ausente." }, 503);
     if (!/^[A-Za-z0-9._-]+$/.test(accessToken)) return reply({ success: false, error_code: "MP_INVALID_SECRET_FORMAT", diagnostic_id: diagnosticId, message: "Access Token com formato inválido." }, 503);
     if (!['test', 'production'].includes(mode)) return reply({ success: false, error_code: "MP_INVALID_MODE", diagnostic_id: diagnosticId, message: "Modo Mercado Pago inválido." }, 503);
+    const expectedApplicationId = APPLICATION_IDS[mode as keyof typeof APPLICATION_IDS];
 
     const caller = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: request.headers.get("Authorization") ?? "" } } });
     const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -51,7 +52,7 @@ Deno.serve(async (request) => {
       }
       if (!allowed) return reply({ success: false, error_code: "FORBIDDEN", message: "Acesso negado." }, 403);
       const { data: orders } = await admin.from("vertex_support_payments").select("id,mercado_pago_order_id,external_reference,amount,payment_method,payment_method_type,status,status_detail,mercado_pago_application_id,environment,created_at").order("created_at", { ascending: false }).limit(50);
-      return reply({ success: true, application: "Vertex Donate", expected_application_id: EXPECTED_APPLICATION_ID, mode, max_amount: maxAmount, access_token_configured: true, webhook_secret_configured: Boolean(Deno.env.get("MERCADO_PAGO_WEBHOOK_SECRET")), orders: orders ?? [] });
+      return reply({ success: true, application: "Vertex Donate", expected_application_id: expectedApplicationId, production_application_id: APPLICATION_IDS.production, test_application_id: APPLICATION_IDS.test, mode, max_amount: maxAmount, access_token_configured: true, webhook_secret_configured: Boolean(Deno.env.get("MERCADO_PAGO_WEBHOOK_SECRET")), orders: orders ?? [] });
     }
     if (action === "get") {
       const { data } = await admin.from("vertex_support_payments").select("id,mercado_pago_order_id,external_reference,amount,currency,payment_method,payment_method_type,status,status_detail,environment,live_mode,mercado_pago_application_id,created_at,approved_at,refunded_at,safe_provider_data").eq("id", clean(body.id, 80)).eq("user_id", user.id).maybeSingle();
@@ -94,9 +95,9 @@ Deno.serve(async (request) => {
       return reply({ success: false, error_code: "MP_ORDER_CREATION_FAILED", diagnostic_id: diagnosticId, message: "Não foi possível gerar o pagamento.", provider_error: error }, 502);
     }
     const environmentMismatch = mode === "test" ? order.live_mode === true : order.live_mode !== true;
-    if (applicationId !== EXPECTED_APPLICATION_ID || environmentMismatch) {
-      await admin.from("vertex_support_payments").update({ mercado_pago_order_id: clean(order.id, 100) || null, mercado_pago_application_id: applicationId || null, payment_method: paymentMethodId, payment_method_type: paymentMethodType, status: "configuration_mismatch", status_detail: applicationId !== EXPECTED_APPLICATION_ID ? "APPLICATION_MISMATCH" : "ENVIRONMENT_MISMATCH", live_mode: order.live_mode === true, safe_provider_data: { diagnostic_id: diagnosticId }, updated_at: new Date().toISOString() }).eq("id", id);
-      return reply({ success: false, error_code: applicationId !== EXPECTED_APPLICATION_ID ? "APPLICATION_MISMATCH" : "ENVIRONMENT_MISMATCH", diagnostic_id: diagnosticId, message: "A Order foi criada por uma aplicação ou ambiente incorreto.", expected_application_id: EXPECTED_APPLICATION_ID, order_application_id: applicationId }, 502);
+    if (applicationId !== expectedApplicationId || environmentMismatch) {
+      await admin.from("vertex_support_payments").update({ mercado_pago_order_id: clean(order.id, 100) || null, mercado_pago_application_id: applicationId || null, payment_method: paymentMethodId, payment_method_type: paymentMethodType, status: "configuration_mismatch", status_detail: applicationId !== expectedApplicationId ? "APPLICATION_MISMATCH" : "ENVIRONMENT_MISMATCH", live_mode: order.live_mode === true, safe_provider_data: { diagnostic_id: diagnosticId }, updated_at: new Date().toISOString() }).eq("id", id);
+      return reply({ success: false, error_code: applicationId !== expectedApplicationId ? "APPLICATION_MISMATCH" : "ENVIRONMENT_MISMATCH", diagnostic_id: diagnosticId, message: "A Order foi criada por uma aplicação ou ambiente incorreto.", expected_application_id: expectedApplicationId, order_application_id: applicationId }, 502);
     }
     const safeData = { diagnostic_id: diagnosticId, transaction_id: transaction.id, qr_code: transaction.payment_method?.qr_code, qr_code_base64: transaction.payment_method?.qr_code_base64, ticket_url: transaction.payment_method?.ticket_url };
     const { error: updateError } = await admin.from("vertex_support_payments").update({ mercado_pago_order_id: String(order.id), mercado_pago_application_id: applicationId, payment_method: paymentMethodId, payment_method_type: paymentMethodType, status: transaction.status ?? order.status ?? "processing", status_detail: transaction.status_detail ?? order.status_detail ?? null, live_mode: order.live_mode === true, safe_provider_data: safeData, updated_at: new Date().toISOString() }).eq("id", id);

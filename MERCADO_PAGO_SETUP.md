@@ -1,6 +1,6 @@
 # Vertex Donate — Mercado Pago
 
-Integração exclusiva da aplicação **Vertex Donate** (`Application ID 6192988275087581`), usando Checkout Transparente e API Orders. Nunca coloque credenciais no Git, no navegador ou neste documento.
+Integração exclusiva da aplicação **Vertex Donate**, usando Checkout Transparente e API Orders. A aplicação principal possui ID `6192988275087581`; as credenciais sandbox fornecidas pelo Mercado Pago possuem o Application ID de teste `3277123445606852`. Nunca coloque credenciais no Git, no navegador ou neste documento.
 
 ## 1. Variáveis
 
@@ -53,10 +53,11 @@ Se a API responder `invalid_credentials`, confira no painel da própria aplicaç
 
 Dono ou Super Admin abre **Apoie a Vertex > Integrações → Mercado Pago**. Cada registro mostra Order ID, `external_reference`, valor, status, método, ambiente e Application ID. Use **Copiar Order ID** para obter o identificador `ORD...` exigido na medição de qualidade.
 
-A integração só está corretamente vinculada quando uma Order nova retorna:
+A integração só está corretamente vinculada quando uma Order nova retorna o ID correspondente ao ambiente:
 
 ```text
-integration_data.application_id = 6192988275087581
+TEST: integration_data.application_id = 3277123445606852
+PRODUCTION: integration_data.application_id = 6192988275087581
 processing_mode = automatic
 ```
 
