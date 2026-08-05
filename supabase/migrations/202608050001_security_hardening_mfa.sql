@@ -1,30 +1,37 @@
 -- Vertex Hub: endurecimento de identidade, roles, multiempresa e MFA.
 
+-- Limpa overloads sem identidade explícita caso uma tentativa anterior tenha
+-- sido executada parcialmente pelo SQL Editor.
+drop function if exists public.is_super_admin();
+drop function if exists public.is_company_member(uuid);
+drop function if exists public.is_company_writer(uuid);
+drop function if exists public.is_company_owner(uuid);
+
 -- A autoridade Super Admin exige role ativa E sessão MFA AAL2.
-create or replace function public.is_super_admin()
+create or replace function public.is_super_admin(uid uuid default auth.uid())
 returns boolean language sql stable security definer set search_path=public,auth as $$
-  select coalesce(auth.jwt()->>'aal','aal1') = 'aal2'
-    and exists(select 1 from public.profiles p where p.user_id=auth.uid() and p.global_role='super_admin' and p.status='active')
+  select uid=auth.uid()
+    and coalesce(auth.jwt()->>'aal','aal1') = 'aal2'
+    and exists(select 1 from public.profiles p where p.user_id=uid and p.global_role='super_admin' and p.status='active')
 $$;
-revoke all on function public.is_super_admin() from public,anon;
-grant execute on function public.is_super_admin() to authenticated;
+revoke all on function public.is_super_admin(uuid) from public,anon;
+grant execute on function public.is_super_admin(uuid) to authenticated;
 
 -- Helpers nunca aceitam identidade indicada pelo navegador.
-create or replace function public.is_company_member(cid uuid)
+create or replace function public.is_company_member(cid uuid,uid uuid default auth.uid())
 returns boolean language sql stable security definer set search_path=public as $$
- select public.is_super_admin() or exists(select 1 from public.company_members m where m.company_id=cid and m.user_id=auth.uid())
+ select uid=auth.uid() and (public.is_super_admin(uid) or exists(select 1 from public.company_members m where m.company_id=cid and m.user_id=uid))
 $$;
-create or replace function public.is_company_writer(cid uuid)
+create or replace function public.is_company_writer(cid uuid,uid uuid default auth.uid())
 returns boolean language sql stable security definer set search_path=public as $$
- select public.is_super_admin() or exists(select 1 from public.company_members m join public.profiles p on p.user_id=m.user_id where m.company_id=cid and m.user_id=auth.uid() and m.role in('company_owner','admin') and p.status='active')
+ select uid=auth.uid() and (public.is_super_admin(uid) or exists(select 1 from public.company_members m join public.profiles p on p.user_id=m.user_id where m.company_id=cid and m.user_id=uid and m.role in('company_owner','admin') and p.status='active'))
 $$;
-create or replace function public.is_company_owner(cid uuid)
+create or replace function public.is_company_owner(cid uuid,uid uuid default auth.uid())
 returns boolean language sql stable security definer set search_path=public as $$
- select public.is_super_admin() or exists(select 1 from public.company_members m where m.company_id=cid and m.user_id=auth.uid() and m.role='company_owner')
+ select uid=auth.uid() and (public.is_super_admin(uid) or exists(select 1 from public.company_members m where m.company_id=cid and m.user_id=uid and m.role='company_owner'))
 $$;
-revoke all on function public.is_company_member(uuid),public.is_company_writer(uuid),public.is_company_owner(uuid) from public,anon;
-grant execute on function public.is_company_member(uuid),public.is_company_writer(uuid),public.is_company_owner(uuid) to authenticated;
-revoke all on function public.is_super_admin(uuid),public.is_company_member(uuid,uuid),public.is_company_writer(uuid,uuid),public.is_company_owner(uuid,uuid) from public,anon,authenticated;
+revoke all on function public.is_company_member(uuid,uuid),public.is_company_writer(uuid,uuid),public.is_company_owner(uuid,uuid) from public,anon;
+grant execute on function public.is_company_member(uuid,uuid),public.is_company_writer(uuid,uuid),public.is_company_owner(uuid,uuid) to authenticated;
 
 -- Defesa em profundidade: nem policy permissiva futura permite autopromoção.
 create or replace function public.protect_profile_security_fields()
