@@ -6,6 +6,7 @@ const checks={
  "Nova tabela e RLS":/vertex_support_payments/.test(sql)&&/enable row level security/.test(sql)&&/user_id = auth\.uid\(\)/.test(sql),
  "Sem escrita financeira cliente":/revoke all on public\.vertex_support_payments/.test(sql)&&!/grant (insert|update|delete)/.test(sql),
  "Application IDs por ambiente":/3277123445606852/.test(orders)&&/6192988275087581/.test(orders)&&/APPLICATION_IDS/.test(webhook)&&/expected_application_id/.test(ui),
+ "live_mode ausente tratado por ambiente":/providerLiveMode !== undefined/.test(orders)&&/effectiveLiveMode/.test(webhook),
  "Orders e idempotência":/api\.mercadopago\.com\/v1\/orders/.test(orders)&&/X-Idempotency-Key/.test(orders)&&/unique \(user_id, client_request_id\)/.test(sql),
  "Mínimo de R$ 1 em todas as camadas":/const MIN = 1/.test(ui)&&/amount < 1/.test(orders)&&/amount between 1 and 1000/.test(minimum),
  "JWT deriva usuário":/auth\.getUser\(\)/.test(orders)&&/user_id: user\.id/.test(orders),

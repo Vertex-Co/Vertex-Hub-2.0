@@ -38,7 +38,9 @@ Deno.serve(async (request) => {
     const transaction = order?.transactions?.payments?.[0] ?? {};
     const applicationId = clean(order?.integration_data?.application_id, 32);
     const expectedLiveMode = mode === "production";
-    if (applicationId !== expectedApplicationId || (order.live_mode === true) !== expectedLiveMode) return json({ success: false, error_code: "ORDER_CONFIGURATION_MISMATCH" }, 409);
+    const providerLiveMode = typeof order.live_mode === "boolean" ? order.live_mode : undefined;
+    const effectiveLiveMode = providerLiveMode ?? expectedLiveMode;
+    if (applicationId !== expectedApplicationId || (providerLiveMode !== undefined && providerLiveMode !== expectedLiveMode)) return json({ success: false, error_code: "ORDER_CONFIGURATION_MISMATCH" }, 409);
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: local } = await supabase.from("vertex_support_payments").select("id,amount,currency,external_reference,mercado_pago_order_id,environment").eq("external_reference", order.external_reference).eq("mercado_pago_order_id", String(order.id)).maybeSingle();
@@ -46,7 +48,7 @@ Deno.serve(async (request) => {
     const status = transaction.status ?? order.status ?? "processing";
     const refunded = status === "refunded";
     const approved = status === "approved";
-    const { error } = await supabase.from("vertex_support_payments").update({ status, status_detail: transaction.status_detail ?? order.status_detail ?? null, payment_method: transaction.payment_method?.id ?? null, payment_method_type: transaction.payment_method?.type ?? null, mercado_pago_application_id: applicationId, live_mode: order.live_mode === true, approved_at: approved && mode === "production" ? new Date().toISOString() : null, refunded_at: refunded ? new Date().toISOString() : null, updated_at: new Date().toISOString() }).eq("id", local.id);
+    const { error } = await supabase.from("vertex_support_payments").update({ status, status_detail: transaction.status_detail ?? order.status_detail ?? null, payment_method: transaction.payment_method?.id ?? null, payment_method_type: transaction.payment_method?.type ?? null, mercado_pago_application_id: applicationId, live_mode: effectiveLiveMode, approved_at: approved && mode === "production" ? new Date().toISOString() : null, refunded_at: refunded ? new Date().toISOString() : null, updated_at: new Date().toISOString() }).eq("id", local.id);
     if (error) return json({ success: false, error_code: "DATABASE_UPDATE_FAILED" }, 500);
     console.log("vertex_donate_webhook_ok", { diagnosticId, orderId: clean(order.id, 80), externalReference: clean(order.external_reference, 100), status, statusDetail: clean(transaction.status_detail, 120), applicationId });
     return json({ success: true });
