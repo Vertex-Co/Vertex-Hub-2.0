@@ -1,4 +1,4 @@
-import { Activity,BarChart3,Building2,CalendarDays,ChevronDown,Eye,EyeOff,FileArchive,Flag,HeartPulse,KeyRound,LayoutDashboard,LifeBuoy,ListChecks,LogOut,Menu,Moon,PiggyBank,Plus,ReceiptText,Settings,ShieldCheck,Sun,Users,X } from "lucide-react";
+import { Activity,BarChart3,Building2,CalendarDays,ChevronDown,Eye,EyeOff,FileArchive,Flag,Heart,HeartPulse,KeyRound,LayoutDashboard,LifeBuoy,ListChecks,LogOut,Menu,Moon,PiggyBank,Plus,ReceiptText,Settings,ShieldCheck,Sun,Users,X } from "lucide-react";
 import { useEffect,useMemo,useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { roleLabels } from "../../config/labels";
@@ -13,7 +13,7 @@ import { NotificationCenter } from "../notifications/NotificationCenter";
 import { Button } from "../ui/Common";
 import { AppFooter } from "./AppFooter";
 
-const finance:[Page,string,React.ElementType][]=[["dashboard","Visão geral",LayoutDashboard],["transactions","Transações",ReceiptText],["reports","Relatórios",BarChart3],["budgets","Orçamentos",PiggyBank],["goals","Metas",Flag],["tasks","Tarefas",ListChecks],["crm","CRM",Users],["documents","Documentos",FileArchive],["calendar","Calendário",CalendarDays],["support","Suporte",LifeBuoy],["settings","Configurações",Settings]];
+const finance:[Page,string,React.ElementType][]=[["dashboard","Visão geral",LayoutDashboard],["transactions","Transações",ReceiptText],["reports","Relatórios",BarChart3],["budgets","Orçamentos",PiggyBank],["goals","Metas",Flag],["tasks","Tarefas",ListChecks],["crm","CRM",Users],["documents","Documentos",FileArchive],["calendar","Calendário",CalendarDays],["support-vertex","Apoie a Vertex",Heart],["support","Suporte",LifeBuoy],["settings","Configurações",Settings]];
 const globalGroups:{label:string;items:[Page,string,React.ElementType][]}[]=[{label:"GESTÃO",items:[["admin-overview","Visão Geral",LayoutDashboard],["companies","Empresas",Building2],["admin-users","Usuários",Users]]},{label:"PLATAFORMA",items:[["admin-resources","Recursos",Flag],["admin-keys","Chaves de Ativação",KeyRound],["admin-content","Conteúdo do Site",ReceiptText],["admin-notifications","Notificações",Activity]]},{label:"SEGURANÇA",items:[["admin-audit","Auditoria",Activity],["admin-security","Segurança",ShieldCheck]]},{label:"SISTEMA",items:[["admin-system","Saúde",HeartPulse],["admin-settings","Configurações",Settings]]}];
 type PlatformRow={id:string;title:string;message:string;type:string;target_type:string;target_value:string|null};
 

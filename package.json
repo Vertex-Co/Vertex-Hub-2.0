@@ -10,6 +10,7 @@
     "test:onboarding": "node scripts/verify-atomic-onboarding.mjs",
     "test:permissions": "node scripts/verify-permissions.mjs",
     "test:security": "node scripts/verify-security.mjs",
+    "test:mercadopago": "node scripts/verify-mercadopago.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
