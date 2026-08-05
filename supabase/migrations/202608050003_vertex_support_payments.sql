@@ -28,7 +28,9 @@ create index if not exists support_payments_status_idx on public.support_payment
 alter table public.support_payments enable row level security;
 revoke all on public.support_payments from anon,authenticated;
 grant select on public.support_payments to authenticated;
+drop policy if exists support_own_read on public.support_payments;
 create policy support_own_read on public.support_payments for select to authenticated using(user_id=auth.uid());
+drop policy if exists support_company_admin_read on public.support_payments;
 create policy support_company_admin_read on public.support_payments for select to authenticated using(company_id is not null and public.is_company_owner(company_id));
 -- Service Role ignora RLS. Nao existe INSERT/UPDATE/DELETE para clientes.
 
@@ -40,4 +42,3 @@ grant select on public.public_supporters to authenticated;
 
 comment on table public.support_payments is 'Apoios voluntarios. Pagamentos test nunca concedem recompensas reais.';
 comment on column public.support_payments.raw_safe_response is 'Somente IDs/status; nunca dados PCI, token de cartao ou PII.';
-
