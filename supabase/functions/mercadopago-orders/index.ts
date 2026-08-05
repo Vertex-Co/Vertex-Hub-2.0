@@ -11,7 +11,7 @@ const safeText = (value: unknown, max = 300) =>
   String(value ?? "").replace(/[<>\u0000-\u001f]/g, "").trim().slice(0, max);
 const MIN = 5;
 const MAX = 1000;
-const EXPECTED_APPLICATION_ID = "4794463110657477";
+const EXPECTED_APPLICATION_ID = "2112079474766450";
 const MP_ORDERS_URL = "https://api.mercadopago.com/v1/orders";
 
 type ProviderError = {

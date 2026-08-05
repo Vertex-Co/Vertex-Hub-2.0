@@ -72,9 +72,9 @@ Defina `MERCADO_PAGO_MODE=test`, restaure credenciais de teste, republique as fu
 
 ### Projeto e aplicação esperados
 
-Esta versão usa o projeto Supabase `dsklsyftdpjwdbfxbqsp` e aceita somente Orders TEST da aplicação Mercado Pago `4794463110657477`. Se o frontend estiver configurado com outro `VITE_SUPABASE_URL`, ele chamará Edge Functions e secrets de outro projeto. No Vercel, abra **Project Settings > Environment Variables**, confira `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` e faça um novo deploy. Nunca coloque a `service_role` no frontend.
+Esta versão usa o projeto Supabase `dsklsyftdpjwdbfxbqsp` e aceita somente Orders TEST da aplicação Mercado Pago `2112079474766450`. Se o frontend estiver configurado com outro `VITE_SUPABASE_URL`, ele chamará Edge Functions e secrets de outro projeto. No Vercel, abra **Project Settings > Environment Variables**, confira `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` e faça um novo deploy. Nunca coloque a `service_role` no frontend.
 
-No Mercado Pago, abra **Suas integrações > aplicação 4794463110657477 > Credenciais de teste**. A Public Key do Vercel e o Access Token salvo nos Edge Function Secrets devem vir dessa mesma tela.
+No Mercado Pago, abra **Suas integrações > aplicação 2112079474766450 > Credenciais de teste**. A Public Key do Vercel e o Access Token salvo nos Edge Function Secrets devem vir dessa mesma tela.
 
 Uma falha retorna um `diagnostic_id`, o HTTP status e um código sanitizado do provedor. Consulte os logs da função `mercadopago-orders` pelo `diagnostic_id`; os logs não incluem Authorization, tokens, dados de cartão ou secrets. Uma Order com outro `integration_data.application_id` é bloqueada com `APPLICATION_MISMATCH`.
 

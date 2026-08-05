@@ -17,7 +17,7 @@ const checks = {
   "UI bloqueia submit e valida valor": /if\s*\(busy\)\s*return/.test(ui) && /chosen\s*>=\s*MIN\s*&&\s*chosen\s*<=\s*MAX/.test(ui),
   "Pix, crédito, débito e 3DS/status": /bankTransfer:\s*\["pix"\]/.test(ui) && /creditCard:\s*"all"/.test(ui) && /debitCard:\s*"all"/.test(ui) && /pending_challenge/.test(ui),
   "Secrets separados": /VITE_MERCADO_PAGO_PUBLIC_KEY/.test(env) && /MERCADO_PAGO_ACCESS_TOKEN/.test(env) && /MERCADO_PAGO_WEBHOOK_SECRET/.test(env),
-  "Application ID correto": /4794463110657477/.test(orders) && /APPLICATION_MISMATCH/.test(orders),
+  "Application ID correto": /2112079474766450/.test(orders) && /APPLICATION_MISMATCH/.test(orders),
   "Erros estruturados e retry": /diagnostic_id/.test(orders) && /Tentar novamente/.test(ui),
 };
 
