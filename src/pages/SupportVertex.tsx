@@ -15,6 +15,7 @@ type Payment = {
   external_reference: string;
   amount: number;
   payment_method?: string;
+  mercado_pago_user_id?: string;
   status: string;
   status_detail?: string;
   environment: string;
@@ -63,13 +64,20 @@ export function SupportVertex() {
     setCheckout(false);
     setTimeout(() => setCheckout(true), 0);
   };
+  const synchronize = async (id:string) => {
+    setBusy(true);
+    const {data} = await supabase.functions.invoke("mercado-pago-create-order", {body:{action:"get",id}});
+    setBusy(false);
+    if (data?.success) await load();
+    else setError(data?.message ?? "Não foi possível sincronizar a Order.");
+  };
   const load = async () => {
     const runtimeResponse = await supabase.functions.invoke("mercado-pago-create-order", {body:{action:"runtime-config"}});
     if (!runtimeResponse.error && runtimeResponse.data?.success) setRuntime(runtimeResponse.data);
     const { data } = await supabase
       .from("vertex_support_payments")
       .select(
-        "id,mercado_pago_order_id,external_reference,amount,payment_method,status,status_detail,environment,created_at",
+        "id,mercado_pago_order_id,external_reference,amount,payment_method,status,status_detail,mercado_pago_user_id,environment,created_at",
       )
       .order("created_at", { ascending: false })
       .limit(20);
@@ -446,18 +454,10 @@ export function SupportVertex() {
                       {o.environment}
                     </p>
                     <p>Método: {o.payment_method ?? "—"} • Application ID: {o.mercado_pago_application_id ?? "aguardando"}</p>
+                    {o.mercado_pago_user_id && <p>Conta recebedora (User ID): {o.mercado_pago_user_id}</p>}
                     <p>{o.mercado_pago_application_id === (admin?.expected_application_id ?? "3277123445606852") ? "✅ Credenciais pertencem ao ambiente correto da Vertex Donate" : o.mercado_pago_application_id ? "❌ Credenciais pertencem a outra aplicação/ambiente" : "Validação pendente"}</p>
                     {o.mercado_pago_order_id && (
-                      <button
-                        className="mt-2 text-blue-500"
-                        onClick={() =>
-                          void navigator.clipboard.writeText(
-                            o.mercado_pago_order_id,
-                          )
-                        }
-                      >
-                        Copiar Order ID
-                      </button>
+                      <div className="mt-2 flex gap-3"><button className="text-blue-500" onClick={() => void navigator.clipboard.writeText(o.mercado_pago_order_id)}>Copiar Order ID</button><button disabled={busy} className="text-blue-500" onClick={() => void synchronize(o.id)}>Sincronizar</button></div>
                     )}
                   </div>
                 ))}

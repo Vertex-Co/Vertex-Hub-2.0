@@ -45,10 +45,12 @@ Deno.serve(async (request) => {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: local } = await supabase.from("vertex_support_payments").select("id,amount,currency,external_reference,mercado_pago_order_id,environment").eq("external_reference", order.external_reference).eq("mercado_pago_order_id", String(order.id)).maybeSingle();
     if (!local || Number(local.amount) !== Number(order.total_amount) || local.currency !== (order.currency ?? "BRL") || local.environment !== mode) return json({ success: false, error_code: "ORDER_DATA_MISMATCH" }, 409);
-    const status = transaction.status ?? order.status ?? "processing";
+    const providerStatus = clean(transaction.status ?? order.status ?? "processing", 80);
+    const statusDetail = clean(transaction.status_detail ?? order.status_detail, 120);
+    const status = providerStatus === "processed" && statusDetail === "accredited" ? "approved" : providerStatus;
     const refunded = status === "refunded";
     const approved = status === "approved";
-    const { error } = await supabase.from("vertex_support_payments").update({ status, status_detail: transaction.status_detail ?? order.status_detail ?? null, payment_method: transaction.payment_method?.id ?? null, payment_method_type: transaction.payment_method?.type ?? null, mercado_pago_application_id: applicationId, live_mode: effectiveLiveMode, approved_at: approved && mode === "production" ? new Date().toISOString() : null, refunded_at: refunded ? new Date().toISOString() : null, updated_at: new Date().toISOString() }).eq("id", local.id);
+    const { error } = await supabase.from("vertex_support_payments").update({ status, status_detail: statusDetail || null, payment_method: transaction.payment_method?.id ?? null, payment_method_type: transaction.payment_method?.type ?? null, mercado_pago_application_id: applicationId, mercado_pago_user_id: clean(order?.user_id, 40) || null, live_mode: effectiveLiveMode, approved_at: approved && mode === "production" ? new Date().toISOString() : null, refunded_at: refunded ? new Date().toISOString() : null, updated_at: new Date().toISOString() }).eq("id", local.id);
     if (error) return json({ success: false, error_code: "DATABASE_UPDATE_FAILED" }, 500);
     console.log("vertex_donate_webhook_ok", { diagnosticId, orderId: clean(order.id, 80), externalReference: clean(order.external_reference, 100), status, statusDetail: clean(transaction.status_detail, 120), applicationId });
     return json({ success: true });

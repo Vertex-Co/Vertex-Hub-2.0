@@ -53,12 +53,26 @@ Deno.serve(async (request) => {
         allowed = member?.role === "company_owner";
       }
       if (!allowed) return reply({ success: false, error_code: "FORBIDDEN", message: "Acesso negado." }, 403);
-      const { data: orders } = await admin.from("vertex_support_payments").select("id,mercado_pago_order_id,external_reference,amount,payment_method,payment_method_type,status,status_detail,mercado_pago_application_id,environment,created_at").order("created_at", { ascending: false }).limit(50);
+      const { data: orders } = await admin.from("vertex_support_payments").select("id,mercado_pago_order_id,external_reference,amount,payment_method,payment_method_type,status,status_detail,mercado_pago_application_id,mercado_pago_user_id,environment,created_at").order("created_at", { ascending: false }).limit(50);
       return reply({ success: true, application: "Vertex Donate", expected_application_id: expectedApplicationId, production_application_id: APPLICATION_IDS.production, test_application_id: APPLICATION_IDS.test, mode, max_amount: maxAmount, access_token_configured: true, webhook_secret_configured: Boolean(Deno.env.get("MERCADO_PAGO_WEBHOOK_SECRET")), orders: orders ?? [] });
     }
     if (action === "get") {
-      const { data } = await admin.from("vertex_support_payments").select("id,mercado_pago_order_id,external_reference,amount,currency,payment_method,payment_method_type,status,status_detail,environment,live_mode,mercado_pago_application_id,created_at,approved_at,refunded_at,safe_provider_data").eq("id", clean(body.id, 80)).eq("user_id", user.id).maybeSingle();
-      return data ? reply({ success: true, payment: data }) : reply({ success: false, error_code: "NOT_FOUND", message: "Apoio não encontrado." }, 404);
+      const { data } = await admin.from("vertex_support_payments").select("id,mercado_pago_order_id,external_reference,amount,currency,payment_method,payment_method_type,status,status_detail,environment,live_mode,mercado_pago_application_id,mercado_pago_user_id,created_at,approved_at,refunded_at,safe_provider_data").eq("id", clean(body.id, 80)).eq("user_id", user.id).maybeSingle();
+      if (!data) return reply({ success: false, error_code: "NOT_FOUND", message: "Apoio não encontrado." }, 404);
+      if (!data.mercado_pago_order_id) return reply({ success: true, payment: data });
+      const lookup = await fetch(`${ORDERS_URL}/${encodeURIComponent(data.mercado_pago_order_id)}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!lookup.ok) return reply({ success: true, payment: data, reconciliation_pending: true });
+      const remote = await lookup.json();
+      const transaction = remote?.transactions?.payments?.[0] ?? {};
+      const remoteApplicationId = clean(remote?.integration_data?.application_id, 32);
+      const remoteStatusDetail = clean(transaction?.status_detail ?? remote?.status_detail, 120);
+      const providerStatus = clean(transaction?.status ?? remote?.status, 80);
+      const normalizedStatus = providerStatus === "processed" && remoteStatusDetail === "accredited" ? "approved" : providerStatus;
+      const validRemote = remoteApplicationId === expectedApplicationId && clean(remote?.external_reference, 100) === data.external_reference && Number(remote?.total_amount) === Number(data.amount) && (remote?.currency ?? "BRL") === data.currency;
+      if (!validRemote) return reply({ success: false, error_code: "ORDER_RECONCILIATION_MISMATCH", message: "A Order remota não corresponde ao apoio registrado." }, 409);
+      const safeProviderData = { ...(data.safe_provider_data ?? {}), provider_status: providerStatus, provider_user_id: clean(remote?.user_id, 40), processing_mode: clean(remote?.processing_mode, 40) };
+      const { data: refreshed } = await admin.from("vertex_support_payments").update({ status: normalizedStatus, status_detail: remoteStatusDetail || null, mercado_pago_user_id: clean(remote?.user_id, 40) || null, safe_provider_data: safeProviderData, approved_at: normalizedStatus === "approved" && mode === "production" ? new Date().toISOString() : data.approved_at, refunded_at: normalizedStatus === "refunded" ? new Date().toISOString() : data.refunded_at, updated_at: new Date().toISOString() }).eq("id", data.id).select().single();
+      return reply({ success: true, payment: refreshed ?? data });
     }
 
     const amount = Number(body.amount);
@@ -90,6 +104,7 @@ Deno.serve(async (request) => {
     const order = await response.json().catch(() => ({}));
     const transaction = order?.transactions?.payments?.[0] ?? {};
     const applicationId = clean(order?.integration_data?.application_id, 32);
+    const providerUserId = clean(order?.user_id, 40);
     console.log("vertex_donate_order_result", { diagnosticId, httpStatus: response.status, orderId: clean(order?.id, 80), status: clean(order?.status, 80), statusDetail: clean(transaction?.status_detail ?? order?.status_detail, 120), applicationId });
     if (!response.ok) {
       const error = providerError(order, response.status);
@@ -103,8 +118,11 @@ Deno.serve(async (request) => {
       await admin.from("vertex_support_payments").update({ mercado_pago_order_id: clean(order.id, 100) || null, mercado_pago_application_id: applicationId || null, payment_method: paymentMethodId, payment_method_type: paymentMethodType, status: "configuration_mismatch", status_detail: applicationId !== expectedApplicationId ? "APPLICATION_MISMATCH" : "ENVIRONMENT_MISMATCH", live_mode: effectiveLiveMode, safe_provider_data: { diagnostic_id: diagnosticId }, updated_at: new Date().toISOString() }).eq("id", id);
       return reply({ success: false, error_code: applicationId !== expectedApplicationId ? "APPLICATION_MISMATCH" : "ENVIRONMENT_MISMATCH", diagnostic_id: diagnosticId, message: "A Order foi criada por uma aplicação ou ambiente incorreto.", expected_application_id: expectedApplicationId, order_application_id: applicationId }, 502);
     }
-    const safeData = { diagnostic_id: diagnosticId, transaction_id: transaction.id, qr_code: transaction.payment_method?.qr_code, qr_code_base64: transaction.payment_method?.qr_code_base64, ticket_url: transaction.payment_method?.ticket_url };
-    const { error: updateError } = await admin.from("vertex_support_payments").update({ mercado_pago_order_id: String(order.id), mercado_pago_application_id: applicationId, payment_method: paymentMethodId, payment_method_type: paymentMethodType, status: transaction.status ?? order.status ?? "processing", status_detail: transaction.status_detail ?? order.status_detail ?? null, live_mode: effectiveLiveMode, safe_provider_data: safeData, updated_at: new Date().toISOString() }).eq("id", id);
+    const providerStatus = clean(transaction.status ?? order.status ?? "processing", 80);
+    const providerStatusDetail = clean(transaction.status_detail ?? order.status_detail, 120);
+    const normalizedStatus = providerStatus === "processed" && providerStatusDetail === "accredited" ? "approved" : providerStatus;
+    const safeData = { diagnostic_id: diagnosticId, transaction_id: transaction.id, qr_code: transaction.payment_method?.qr_code, qr_code_base64: transaction.payment_method?.qr_code_base64, ticket_url: transaction.payment_method?.ticket_url, provider_status: providerStatus, provider_user_id: providerUserId, processing_mode: clean(order.processing_mode, 40) };
+    const { error: updateError } = await admin.from("vertex_support_payments").update({ mercado_pago_order_id: String(order.id), mercado_pago_application_id: applicationId, mercado_pago_user_id: providerUserId || null, payment_method: paymentMethodId, payment_method_type: paymentMethodType, status: normalizedStatus, status_detail: providerStatusDetail || null, live_mode: effectiveLiveMode, safe_provider_data: safeData, approved_at: normalizedStatus === "approved" && mode === "production" ? new Date().toISOString() : null, updated_at: new Date().toISOString() }).eq("id", id);
     if (updateError) return reply({ success: false, error_code: "ORDER_RECONCILIATION_REQUIRED", diagnostic_id: diagnosticId, message: "Order criada; sincronização com o banco pendente.", order_id: clean(order.id, 80) }, 500);
     return reply({ success: true, payment: { id, order_id: order.id, external_reference: externalReference, application_id: applicationId, processing_mode: order.processing_mode, status: transaction.status ?? order.status, status_detail: transaction.status_detail ?? order.status_detail, payment_method: paymentMethodId, payment_method_type: paymentMethodType, environment: mode, transaction_id: transaction.id, safe_provider_data: safeData, created_at: order.date_created ?? new Date().toISOString() } });
   } catch (error) {
