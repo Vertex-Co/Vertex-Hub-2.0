@@ -49,7 +49,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           current?.id === session.user.id ? current : session.user,
         );
       if (session && event === "SIGNED_IN")
-        setTimeout(() => void supabase.rpc("record_login_activity"), 0);
+        setTimeout(() => {
+          void supabase.rpc("record_login_activity");
+          void supabase.functions.invoke("user-admin", { body: { action: "welcome" } });
+        }, 0);
       setLoading(false);
     });
     return () => data.subscription.unsubscribe();

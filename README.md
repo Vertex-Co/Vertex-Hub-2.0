@@ -33,6 +33,15 @@ npm run test:donation
 npm run build
 ```
 
+## E-mail
+
+Provider: **Resend**. Os e-mails transacionais são enviados exclusivamente pela
+Edge Function server-side; a API Key nunca é incluída no frontend. O domínio do
+remetente precisa estar verificado antes do envio para destinatários reais.
+
+Consulte [RESEND_SETUP.md](./RESEND_SETUP.md) para configurar Resend, DNS,
+secrets do Supabase, variáveis da Vercel e o teste manual.
+
 Siga `GOOGLE_AUTH_SETUP.md` para configurar o login Google. Na Vercel, use
 `npm run build` e publique o diretório `dist`.
 
