@@ -40,7 +40,7 @@ Edge Function server-side; a API Key nunca é incluída no frontend. O domínio 
 remetente precisa estar verificado antes do envio para destinatários reais.
 
 Consulte [RESEND_SETUP.md](./RESEND_SETUP.md) para configurar Resend, DNS,
-secrets do Supabase, variáveis da Vercel e o teste manual.
+o template publicado único, secrets do Supabase, variáveis da Vercel e testes.
 
 Siga `GOOGLE_AUTH_SETUP.md` para configurar o login Google. Na Vercel, use
 `npm run build` e publique o diretório `dist`.

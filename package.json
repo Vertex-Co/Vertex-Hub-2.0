@@ -12,6 +12,7 @@
     "test:security": "node scripts/verify-security.mjs",
     "test:donation": "node scripts/verify-static-pix.mjs",
     "test:email": "node scripts/verify-email.mjs",
+    "test:email-presets": "node scripts/verify-email-presets.mjs",
     "email:test": "node --env-file-if-exists=.env.local scripts/test-email.mjs",
     "typecheck": "tsc -b --pretty false",
     "preview": "vite preview"

@@ -43,13 +43,14 @@ estar em **Supabase Dashboard > Project Settings > Edge Functions > Secrets**:
 RESEND_API_KEY=re_xxxxxxxxx
 RESEND_FROM_EMAIL=noreply@vertexdf.com.br
 RESEND_FROM_NAME=Vertex Hub
-APP_URL=https://vertexdf.com.br
+RESEND_TEMPLATE_ID=
+APP_URL=https://vertex-hub-2-0.vercel.app
 ```
 
 Também é possível configurar com a CLI:
 
 ```bash
-supabase secrets set RESEND_API_KEY=... RESEND_FROM_EMAIL=noreply@vertexdf.com.br RESEND_FROM_NAME="Vertex Hub" APP_URL=https://vertexdf.com.br
+supabase secrets set RESEND_API_KEY=... RESEND_FROM_EMAIL=noreply@vertexdf.com.br RESEND_FROM_NAME="Vertex Hub" RESEND_TEMPLATE_ID=... APP_URL=https://vertex-hub-2-0.vercel.app
 supabase functions deploy user-admin
 ```
 
@@ -60,7 +61,7 @@ antes de publicar a função.
 
 1. Abra [vercel.com](https://vercel.com) e selecione o projeto Vertex Hub.
 2. Acesse **Settings > Environment Variables**.
-3. Adicione `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME` e `APP_URL`.
+3. Adicione `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`, `RESEND_TEMPLATE_ID` e `APP_URL`.
 4. Selecione os ambientes necessários (Preview e/ou Production) e salve.
 5. Faça **Redeploy** para aplicar as alterações.
 
@@ -70,10 +71,22 @@ Edge Function Supabase; por isso, configurar os mesmos secrets no Supabase é
 obrigatório. A configuração da Vercel deixa o projeto preparado para um futuro
 backend Vercel, mas sozinha não configura a Edge Function.
 
+## Template único para testes administrativos
+
+No painel Resend, crie ou reutilize um único template publicado. Configure o
+assunto como `{{TITULO}} | Vertex Hub` e utilize estas variáveis no conteúdo:
+
+`NOME`, `TITULO`, `MENSAGEM`, `CARD_LABEL`, `CARD_VALUE`, `BUTTON_TEXT`,
+`BUTTON_URL` e `ANO`.
+
+Copie o ID do template publicado para `RESEND_TEMPLATE_ID`. Os oito tipos de
+teste do painel usam esse mesmo ID; apenas as variáveis mudam. Não crie um
+template por tipo. Ao trocar o domínio definitivo, altere somente `APP_URL`.
+
 ## 5. Testar
 
 Para um teste local controlado, crie `.env.local` (ignorado pelo Git) com as
-quatro variáveis e execute:
+variáveis e execute:
 
 ```bash
 npm run email:test -- seu-email@dominio.com
@@ -103,7 +116,7 @@ publique novamente a função e só então confirme o envio de teste.
 - [ ] Domínio `vertexdf.com.br` verificado no Resend
 - [ ] SPF, DKIM e demais registros exatamente iguais aos exibidos no painel
 - [ ] API Key com o menor privilégio necessário
-- [ ] Quatro secrets configurados no Supabase
+- [ ] Cinco secrets configurados no Supabase, incluindo `RESEND_TEMPLATE_ID`
 - [ ] Variáveis configuradas na Vercel, sem prefixo público
 - [ ] Migration executada
 - [ ] `user-admin` publicada

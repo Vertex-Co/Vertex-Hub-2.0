@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { appUrl, emailConfigured, sendEmail } from "../_shared/email/client.ts";
+import { appUrl, emailConfigured, sendEmail, sendPublishedTemplate } from "../_shared/email/client.ts";
 import { roleChangedEmail, userAddedToCompanyEmail, welcomeEmail } from "../_shared/email/templates.ts";
+import { EMAIL_TEST_PRESETS, isEmailTestType, type EmailTestType } from "../_shared/email/test-presets.ts";
 import type { EmailTemplate, RenderedEmail } from "../_shared/email/types.ts";
 
 const cors={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"authorization, x-client-info, apikey, content-type"};
@@ -24,11 +25,11 @@ Deno.serve(async req=>{
   const superAdmin=hasSuperRole&&aal==="aal2";
   if(hasSuperRole&&!superAdmin)return json({error:"mfa_required"},403);
 
-  const reserveEmail=async(eventKey:string,template:EmailTemplate,userId:string,email:string)=>{
+  const reserveEmail=async(eventKey:string,template:EmailTemplate,userId:string,email:string,testType?:EmailTestType)=>{
    const since=new Date(Date.now()-10*60_000).toISOString();
    const{count}=await admin.from("transactional_email_events").select("id",{count:"exact",head:true}).eq("actor_id",caller.id).gte("created_at",since);
    if((count??0)>=20)return {allowed:false,reason:"rate_limited" as const};
-   const{data,error}=await admin.from("transactional_email_events").insert({event_key:eventKey,template,user_id:userId,actor_id:caller.id,recipient_masked:mask(email)}).select("id").single();
+   const{data,error}=await admin.from("transactional_email_events").insert({event_key:eventKey,template,user_id:userId,actor_id:caller.id,recipient_masked:mask(email),test_type:testType??null}).select("id").single();
    if(error?.code==="23505")return {allowed:false,reason:"duplicate" as const};
    if(error)throw error;return {allowed:true,id:data.id};
   };
@@ -41,7 +42,21 @@ Deno.serve(async req=>{
 
   if(body.action==="email_status"){
    if(!superAdmin)return json({error:"forbidden"},403);
-   return json({configured:emailConfigured(),from_email:emailConfigured()?Deno.env.get("RESEND_FROM_EMAIL"):null,provider:"resend"});
+   const templateConfigured=Boolean(Deno.env.get("RESEND_TEMPLATE_ID")?.trim());
+   return json({configured:emailConfigured()&&templateConfigured,domain_configured:emailConfigured(),template_configured:templateConfigured,from_email:emailConfigured()?Deno.env.get("RESEND_FROM_EMAIL"):null,provider:"resend"});
+  }
+  if(body.action==="email_test"){
+   if(!superAdmin)return json({error:"forbidden"},403);
+   if(!isEmailTestType(body.templateType))return json({error:"INVALID_EMAIL_TEST_TYPE"},400);
+   const templateId=(Deno.env.get("RESEND_TEMPLATE_ID")??"").trim();if(!emailConfigured()||!templateId)return json({error:"RESEND_NOT_CONFIGURED"},503);
+   const recipient=clean(caller.email??callerProfile?.email,320),name=clean(callerProfile?.full_name??caller.user_metadata?.full_name??"Super Admin",100);if(!recipient)return json({error:"INVALID_RECIPIENT"},400);
+   const since=new Date(Date.now()-60_000).toISOString();const{count}=await admin.from("transactional_email_events").select("id",{count:"exact",head:true}).eq("actor_id",caller.id).not("test_type","is",null).gte("created_at",since);if((count??0)>=5)return json({error:"EMAIL_TEST_RATE_LIMITED"},429);
+   const preset=EMAIL_TEST_PRESETS[body.templateType],base=appUrl(),buttonUrl=new URL(preset.buttonPath,base).toString(),eventKey=`email-test:${caller.id}:${crypto.randomUUID()}`;
+   const reservation=await reserveEmail(eventKey,"system_notification",caller.id,recipient,body.templateType);if(!reservation.allowed)return json({error:reservation.reason==="rate_limited"?"EMAIL_TEST_RATE_LIMITED":"EMAIL_TEST_DUPLICATE"},reservation.reason==="rate_limited"?429:409);
+   const result=await sendPublishedTemplate({to:recipient,eventKey,templateId,userId:caller.id,variables:{NOME:name,TITULO:preset.title,MENSAGEM:preset.message,CARD_LABEL:preset.cardLabel,CARD_VALUE:preset.cardValue,BUTTON_TEXT:preset.buttonText,BUTTON_URL:buttonUrl,ANO:new Date().getFullYear()}});
+   await admin.from("transactional_email_events").update(result.ok?{status:"sent",provider_message_id:result.id,updated_at:new Date().toISOString()}:{status:"failed",error_code:result.code,updated_at:new Date().toISOString()}).eq("id",reservation.id);
+   if(!result.ok)return json({error:result.code},result.code==="RESEND_NOT_CONFIGURED"?503:502);
+   console.log("email_test_sent",{template_type:body.templateType,user_id:caller.id,timestamp:new Date().toISOString()});return json({ok:true,templateType:body.templateType});
   }
   if(body.action==="welcome"){
    if(!emailConfigured())return json({ok:true,email:"RESEND_NOT_CONFIGURED"});

@@ -25,3 +25,8 @@ export type SendEmailInput = {
 export type SendEmailResult =
   | { ok: true; id: string }
   | { ok: false; code: "RESEND_NOT_CONFIGURED" | "RESEND_SEND_FAILED" | "INVALID_RECIPIENT"; retryable: boolean };
+
+export type PublishedTemplateVariables = {
+  NOME:string; TITULO:string; MENSAGEM:string; CARD_LABEL:string;
+  CARD_VALUE:string; BUTTON_TEXT:string; BUTTON_URL:string; ANO:number;
+};
