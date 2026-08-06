@@ -1,643 +1,114 @@
-import { Copy, Heart, ShieldCheck } from "lucide-react";
-import { loadMercadoPago } from "@mercadopago/sdk-js";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button, Card, Input } from "../components/ui/Common";
-import { useCompany } from "../contexts/CompanyContext";
-import { supabase } from "../services/supabase";
-declare global {
-  interface Window {
-    MercadoPago: any;
+import { Check, Copy, Heart, Info, QrCode } from "lucide-react";
+import { useEffect, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
+import { Button, Card } from "../components/ui/Common";
+import { DONATION_PIX } from "../config/donation";
+
+async function copyText(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
   }
+  const field = document.createElement("textarea");
+  field.value = value;
+  field.setAttribute("readonly", "");
+  field.style.position = "fixed";
+  field.style.opacity = "0";
+  document.body.appendChild(field);
+  field.select();
+  const copied = document.execCommand("copy");
+  field.remove();
+  if (!copied) throw new Error("Clipboard indisponível");
 }
-type Payment = {
-  id: string;
-  mercado_pago_order_id?: string;
-  external_reference: string;
-  amount: number;
-  payment_method?: string;
-  mercado_pago_user_id?: string;
-  status: string;
-  status_detail?: string;
-  environment: string;
-  created_at: string;
-};
-const MIN = 1,
-  MAX = 1000,
-  quick = [1, 5, 10, 25, 50, 100];
-const ACTIVE_PAYMENT_KEY = "vertex_active_support_payment";
-const label = (v?: string) =>
-  ({
-    created: "Aguardando pagamento",
-    pending: "Aguardando pagamento",
-    processing: "Processando",
-    approved: "Aprovado",
-    rejected: "Recusado",
-    cancelled: "Cancelado",
-    expired: "Expirado",
-    refunded: "Reembolsado",
-    pending_challenge: "Ação adicional / 3DS",
-    failed: "Erro",
-  })[v ?? ""] ??
-  v ??
-  "Processando";
+
 export function SupportVertex() {
-  const { isAdmin } = useCompany();
-  const [amount, setAmount] = useState(10),
-    [custom, setCustom] = useState(""),
-    [message, setMessage] = useState(""),
-    [isPublic, setPublic] = useState(false),
-    [checkout, setCheckout] = useState(false),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [result, setResult] = useState<any>(),
-    [history, setHistory] = useState<Payment[]>([]),
-    [summary, setSummary] = useState<any>(),
-    [runtime, setRuntime] = useState({
-      mode: "test",
-      max_amount: 1000,
-      expected_application_id: "3277123445606852",
-    }),
-    [admin, setAdmin] = useState<any>();
-  const brick = useRef<any>(null),
-    requestId = useRef(crypto.randomUUID());
-  const publicKey = String(import.meta.env.VITE_MERCADO_PAGO_PUBLIC_KEY ?? "");
-  const chosen = custom ? Number(custom.replace(",", ".")) : amount;
-  const retry = () => {
-    requestId.current = crypto.randomUUID();
-    setError("");
-    void brick.current?.unmount();
-    brick.current = null;
-    setCheckout(false);
-    setTimeout(() => setCheckout(true), 0);
-  };
-  const load = useCallback(async () => {
-    const runtimeResponse = await supabase.functions.invoke(
-      "mercado-pago-create-order",
-      { body: { action: "runtime-config" } },
-    );
-    if (!runtimeResponse.error && runtimeResponse.data?.success)
-      setRuntime(runtimeResponse.data);
-    const { data } = await supabase
-      .from("vertex_support_payments")
-      .select(
-        "id,mercado_pago_order_id,external_reference,amount,payment_method,status,status_detail,mercado_pago_user_id,environment,created_at",
-      )
-      .order("created_at", { ascending: false })
-      .limit(20);
-    setHistory((data ?? []) as Payment[]);
-    const { data: supportSummary } = await supabase
-      .from("vertex_support_summary")
-      .select(
-        "approved_count,approved_total,current_badge,next_badge,next_threshold",
-      )
-      .maybeSingle();
-    setSummary(supportSummary ?? undefined);
-    if (isAdmin) {
-      const r = await supabase.functions.invoke("mercado-pago-create-order", {
-        body: { action: "config" },
-      });
-      if (!r.error) setAdmin(r.data);
+  const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 3000);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+
+  const copy = async () => {
+    try {
+      await copyText(DONATION_PIX.code);
+      setCopyError(false);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+      setCopyError(true);
     }
-  }, [isAdmin]);
-  const refreshActivePaymentStatus = useCallback(
-    async (paymentId?: string) => {
-      let storedId = paymentId;
-      if (!storedId) {
-        try {
-          storedId = JSON.parse(
-            sessionStorage.getItem(ACTIVE_PAYMENT_KEY) ?? "null",
-          )?.supportId;
-        } catch {
-          storedId = undefined;
-        }
-      }
-      if (!storedId) return;
-      const { data } = await supabase.functions.invoke(
-        "mercado-pago-create-order",
-        { body: { action: "get", id: storedId } },
-      );
-      if (data?.payment) {
-        setResult((current: any) => ({
-          ...current,
-          ...data.payment,
-          safe_provider_data:
-            data.payment.safe_provider_data ?? current?.safe_provider_data,
-        }));
-        await load();
-      }
-    },
-    [load],
-  );
-  const synchronize = async (id: string) => {
-    setBusy(true);
-    await refreshActivePaymentStatus(id);
-    setBusy(false);
   };
-  useEffect(() => {
-    void load();
-    void refreshActivePaymentStatus();
-    if (import.meta.env.DEV) console.debug("PAYMENT_MOUNT");
-    return () => {
-      if (import.meta.env.DEV) console.debug("PAYMENT_UNMOUNT");
-    };
-  }, [load, refreshActivePaymentStatus]);
-  useEffect(() => {
-    if (!checkout || !publicKey) return;
-    let alive = true;
-    const render = async () => {
-      await loadMercadoPago();
-      if (!alive) return;
-      const mp = new window.MercadoPago(publicKey, { locale: "pt-BR" });
-      brick.current = await mp
-        .bricks()
-        .create("payment", "paymentBrick_container", {
-          initialization: { amount: chosen },
-          customization: {
-            visual: {
-              style: {
-                theme: document.documentElement.classList.contains("dark")
-                  ? "dark"
-                  : "default",
-              },
-            },
-            paymentMethods: {
-              creditCard: "all",
-              debitCard: "all",
-              bankTransfer: ["pix"],
-              maxInstallments: 12,
-            },
-          },
-          callbacks: {
-            onReady: () => setError(""),
-            onError: (e: any) =>
-              setError(e?.message ?? "Não foi possível carregar o checkout."),
-            onSubmit: async ({
-              selectedPaymentMethod,
-              formData,
-            }: {
-              selectedPaymentMethod?: string;
-              formData: any;
-            }) => {
-              if (busy) return;
-              setBusy(true);
-              setError("");
-              const { data, error: e } = await supabase.functions.invoke(
-                "mercado-pago-create-order",
-                {
-                  body: {
-                    action: "create",
-                    amount: chosen,
-                    currency: "BRL",
-                    client_request_id: requestId.current,
-                    message,
-                    is_public: isPublic,
-                    selected_payment_method: selectedPaymentMethod,
-                    form_data: formData,
-                  },
-                },
-              );
-              setBusy(false);
-              if (e || data?.success === false || data?.error) {
-                const diagnostic = data?.diagnostic_id
-                  ? ` Diagnóstico: ${data.diagnostic_id}.`
-                  : "";
-                const provider = data?.provider_error?.code
-                  ? ` Código: ${data.provider_error.code}.`
-                  : data?.error_code
-                    ? ` Código: ${data.error_code}.`
-                    : "";
-                setError(
-                  `${data?.message ?? "Não foi possível gerar o pagamento."}${provider}${diagnostic}`,
-                );
-                throw e ?? new Error(data?.error_code ?? data?.error);
-              }
-              setResult(data.payment);
-              sessionStorage.setItem(
-                ACTIVE_PAYMENT_KEY,
-                JSON.stringify({
-                  supportId: data.payment.id,
-                  orderId: data.payment.order_id,
-                }),
-              );
-              await load();
-            },
-          },
-        });
-    };
-    void render();
-    return () => {
-      alive = false;
-      void brick.current?.unmount();
-    };
-  }, [checkout, publicKey, chosen]);
-  useEffect(() => {
-    if (
-      !result?.id ||
-      [
-        "approved",
-        "rejected",
-        "cancelled",
-        "expired",
-        "refunded",
-        "failed",
-      ].includes(result.status)
-    )
-      return;
-    const timer = setInterval(() => {
-      if (document.visibilityState === "visible")
-        void refreshActivePaymentStatus(result.id);
-    }, 7000);
-    return () => clearInterval(timer);
-  }, [result?.id, result?.status, refreshActivePaymentStatus]);
-  useEffect(() => {
-    const onVisibility = () => {
-      if (import.meta.env.DEV)
-        console.debug("VISIBILITY", document.visibilityState);
-      if (document.visibilityState === "visible")
-        void refreshActivePaymentStatus(result?.id);
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [result?.id, refreshActivePaymentStatus]);
-  useEffect(() => {
-    if (!result?.id) return;
-    const channel = supabase
-      .channel(`vertex-support-${result.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "vertex_support_payments",
-          filter: `id=eq.${result.id}`,
-        },
-        (payload) => {
-          if (import.meta.env.DEV)
-            console.debug(
-              "PAYMENT_STATUS_CHANGED",
-              (payload.new as any).status,
-            );
-          setResult((current: any) => ({ ...current, ...payload.new }));
-          void load();
-        },
-      )
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [result?.id, load]);
-  useEffect(() => {
-    if (!result?.transaction_id || !window.MercadoPago || !publicKey) return;
-    let screen: any;
-    const mp = new window.MercadoPago(publicKey, { locale: "pt-BR" });
-    void mp
-      .bricks()
-      .create("statusScreen", "statusScreenBrick_container", {
-        initialization: { paymentId: result.transaction_id },
-        callbacks: { onReady: () => {}, onError: () => {} },
-      })
-      .then((x: any) => (screen = x));
-    return () => {
-      void screen?.unmount();
-    };
-  }, [result?.transaction_id, publicKey]);
-  const valid =
-    Number.isFinite(chosen) &&
-    chosen >= MIN &&
-    chosen <= MAX &&
-    Math.round(chosen * 100) === chosen * 100;
-  const supportTotal = useMemo(
-    () =>
-      history
-        .filter(
-          (x) => x.environment === runtime.mode && x.status === "approved",
-        )
-        .reduce((s, x) => s + Number(x.amount), 0),
-    [history, runtime.mode],
-  );
-  const pix = result?.safe_provider_data;
+
   return (
-    <>
-      <div className="mb-6">
-        <p className="text-sm text-blue-500">
-          Contribuição voluntária • ambiente{" "}
-          {runtime.mode === "production" ? "de produção" : "de testes"}
-        </p>
-        <h2 className="text-3xl font-black">Apoie a Vertex 💙</h2>
-        <p className="mt-3 max-w-3xl text-sm text-zinc-500">
-          Deseja apoiar a Vertex e ajudar o projeto a se manter? Sua
-          contribuição ajuda na manutenção, desenvolvimento e evolução do Vertex
-          Hub.
-        </p>
-        <p className="mt-2 text-xs text-zinc-500">
-          O apoio é voluntário e não é necessário para utilizar os recursos
-          normais disponíveis na sua conta. Não representa investimento,
-          participação ou promessa de retorno financeiro.
-        </p>
-      </div>
-      <div className="grid items-start gap-5 xl:grid-cols-[1.1fr_.9fr]">
-        <Card>
-          <div
-            className={`rounded-xl p-3 text-sm ${runtime.mode === "production" ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400"}`}
-          >
-            {runtime.mode === "production" ? (
-              <>
-                <b>PAGAMENTO REAL</b> — a cobrança será processada em produção.
-              </>
-            ) : (
-              <>
-                <b>MODO TESTE</b> — nenhuma cobrança real ou recompensa
-                permanente será concedida.
-              </>
-            )}
-          </div>
-          {!checkout && !result && (
-            <>
-              <h3 className="mt-5 font-bold">Escolha um valor</h3>
-              <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
-                {quick.map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => {
-                      setAmount(v);
-                      setCustom("");
-                    }}
-                    className={`rounded-xl border p-3 text-sm font-bold ${!custom && amount === v ? "border-blue-500 bg-blue-500/10 text-blue-500" : "dark:border-zinc-700"}`}
-                  >
-                    R$ {v}
-                  </button>
-                ))}
-              </div>
-              <label className="mt-4 block">
-                Outro valor
-                <Input
-                  inputMode="decimal"
-                  placeholder="Entre R$ 1 e R$ 1.000"
-                  value={custom}
-                  onChange={(e) =>
-                    setCustom(e.target.value.replace(/[^0-9,.]/g, ""))
-                  }
-                />
-              </label>
-              <label className="mt-4 block">
-                Deixe uma mensagem para a equipe Vertex 💙
-                <textarea
-                  maxLength={200}
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  className="mt-1 min-h-24 w-full rounded-xl border bg-transparent p-3 text-sm dark:border-zinc-700"
-                />
-                <span className="text-xs text-zinc-500">
-                  {message.length}/200
-                </span>
-              </label>
-              <label className="mt-4 flex items-start gap-3 text-sm">
-                <input
-                  type="checkbox"
-                  checked={isPublic}
-                  onChange={(e) => setPublic(e.target.checked)}
-                  className="mt-1"
-                />
-                <span>
-                  Exibir meu nome na comunidade como apoiador. Nunca exibiremos
-                  valor, e-mail, telefone ou dados de pagamento.
-                </span>
-              </label>
-              <Button
-                className="mt-5 w-full"
-                disabled={!valid || !publicKey}
-                onClick={() => setCheckout(true)}
-              >
-                Continuar com R${" "}
-                {valid ? chosen.toFixed(2).replace(".", ",") : "—"}
-              </Button>
-              {!publicKey && (
-                <p className="mt-3 text-sm text-red-500">
-                  Public Key não configurada.
-                </p>
-              )}
-            </>
-          )}
-          {checkout && !result && (
-            <>
-              <div className="mt-5 flex items-center justify-between">
-                <b>Checkout seguro Mercado Pago</b>
-                <button
-                  className="text-sm text-blue-500"
-                  onClick={() => setCheckout(false)}
-                >
-                  Alterar valor
-                </button>
-              </div>
-              <div id="paymentBrick_container" className="mt-4 min-h-80" />
-            </>
-          )}
-          {result && (
-            <div className="mt-5">
-              <ShieldCheck className="text-blue-500" size={36} />
-              <h3 className="mt-3 text-xl font-black">
-                {result.status === "approved"
-                  ? "✅ Pagamento aprovado!"
-                  : label(result.status)}
-              </h3>
-              {result.status === "approved" && (
-                <div className="mt-2">
-                  <p className="font-bold">Obrigado por apoiar a Vertex 💙</p>
-                  <p className="text-sm text-zinc-500">
-                    Seu apoio foi confirmado e seu perfil de apoiador foi atualizado.
-                  </p>
-                </div>
-              )}
-              <p className="text-sm text-zinc-500">
-                Pagamento {runtime.mode === "production" ? "real" : "de teste"}{" "}
-                • R$ {Number(result.amount ?? chosen).toFixed(2).replace(".", ",")}
-              </p>
-              {result.status !== "approved" && pix?.qr_code_base64 && (
-                <img
-                  className="mx-auto mt-4 max-w-64"
-                  alt="QR Code Pix retornado pelo Mercado Pago"
-                  src={`data:image/png;base64,${pix.qr_code_base64}`}
-                />
-              )}{" "}
-              {result.status !== "approved" && pix?.qr_code && (
-                <>
-                  <textarea
-                    readOnly
-                    value={pix.qr_code}
-                    className="mt-4 h-24 w-full rounded-xl border bg-transparent p-3 text-xs dark:border-zinc-700"
-                  />
-                  <Button
-                    className="mt-2"
-                    onClick={() =>
-                      void navigator.clipboard.writeText(pix.qr_code)
-                    }
-                  >
-                    <Copy size={16} />
-                    Copiar código Pix
-                  </Button>
-                  <p className="mt-3 text-sm text-zinc-500">
-                    Aguardando pagamento... O pagamento será identificado
-                    automaticamente. Não é necessário enviar comprovante.
-                  </p>
-                </>
-              )}
-              {isAdmin && result.order_id && (
-                <p className="mt-4 break-all rounded-xl bg-zinc-100 p-3 text-xs dark:bg-zinc-950">
-                  Order ID: {result.order_id}
-                </p>
-              )}
-              <Button
-                className="mt-5"
-                variant="secondary"
-                onClick={() => {
-                  setResult(undefined);
-                  setCheckout(false);
-                  sessionStorage.removeItem(ACTIVE_PAYMENT_KEY);
-                  requestId.current = crypto.randomUUID();
-                }}
-              >
-                Fazer outro apoio
-              </Button>
-            </div>
-          )}
-          {error && (
-            <div className="mt-3 rounded-xl bg-red-500/10 p-3 text-sm text-red-500">
-              <p>{error}</p>
-              {checkout && !result && (
-                <Button className="mt-3" variant="secondary" onClick={retry}>
-                  Tentar novamente
-                </Button>
-              )}
-            </div>
-          )}
-        </Card>
-        <div className="space-y-5">
-          <Card>
-            <Heart className="text-blue-500" />
-            <h3 className="mt-3 font-bold">Meu apoio à Vertex</h3>
-            <p className="mt-3 text-2xl font-black">
-              R${" "}
-              {Number(
-                runtime.mode === "production"
-                  ? summary?.approved_total ?? 0
-                  : supportTotal,
-              )
-                .toFixed(2)
-                .replace(".", ",")}
-            </p>
-            <p className="text-xs font-bold text-amber-500">
-              {runtime.mode === "production"
-                ? "APOIOS REAIS CONFIRMADOS NESTA LISTA."
-                : "DADOS DE TESTE — não compõem saldo ou badge real."}
-            </p>
-            <p className="mt-3 text-sm text-zinc-500">
-              {runtime.mode === "production"
-                ? Number(summary?.approved_count ?? 0)
-                : history.length}{" "}
-              apoio(s) confirmado(s).
-            </p>
-            {runtime.mode === "production" && (
-              <div className="mt-3 text-sm">
-                <p>Badge atual: <b>{summary?.current_badge ?? "Sem badge"}</b></p>
-                {summary?.next_badge && (
-                  <>
-                    <p>Próximo nível: <b>{summary.next_badge}</b></p>
-                    <p>Faltam R$ {Math.max(0, Number(summary.next_threshold) - Number(summary.approved_total)).toFixed(2).replace(".", ",")}</p>
-                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
-                      <div className="h-full bg-blue-500 transition-all" style={{ width: `${Math.min(100, Number(summary.approved_total) / Number(summary.next_threshold) * 100)}%` }} />
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-          </Card>
-          {isAdmin && (
-            <Card>
-              <h3 className="font-bold">Integrações → Mercado Pago</h3>
-              <p className="mt-2 text-sm text-zinc-500">
-                Modo: <b>{admin?.mode?.toUpperCase() ?? "TESTE"}</b>
-              </p>
-              <p className="mt-1 text-sm text-zinc-500">
-                Aplicação: <b>Vertex Donate</b>
-              </p>
-              <p className="text-sm text-zinc-500">
-                Application ID esperado em{" "}
-                {admin?.mode?.toUpperCase() ?? "TEST"}:{" "}
-                <b>{admin?.expected_application_id ?? "3277123445606852"}</b>
-              </p>
-              <div className="mt-3 grid gap-2 text-sm">
-                <span>
-                  Public Key: {publicKey ? "Configurada" : "Não configurada"}
-                </span>
-                <span>
-                  Access Token:{" "}
-                  {admin?.access_token_configured
-                    ? "Configurado"
-                    : "Não configurado"}
-                </span>
-                <span>
-                  Webhook Secret:{" "}
-                  {admin?.webhook_secret_configured
-                    ? "Configurado"
-                    : "Não configurado"}
-                </span>
-              </div>
-              <div className="mt-4 space-y-2">
-                {(admin?.orders ?? []).slice(0, 10).map((o: any) => (
-                  <div
-                    key={o.id}
-                    className="rounded-xl border p-3 text-xs dark:border-zinc-700"
-                  >
-                    <b>{o.mercado_pago_order_id ?? "Order pendente"}</b>
-                    <p>
-                      {o.external_reference} • R$ {Number(o.amount).toFixed(2)}{" "}
-                      • {label(o.status)} • {o.environment}
-                    </p>
-                    <p>
-                      Método: {o.payment_method ?? "—"} • Application ID:{" "}
-                      {o.mercado_pago_application_id ?? "aguardando"}
-                    </p>
-                    {o.mercado_pago_user_id && (
-                      <p>
-                        Conta recebedora (User ID): {o.mercado_pago_user_id}
-                      </p>
-                    )}
-                    <p>
-                      {o.mercado_pago_application_id ===
-                      (admin?.expected_application_id ?? "3277123445606852")
-                        ? "✅ Credenciais pertencem ao ambiente correto da Vertex Donate"
-                        : o.mercado_pago_application_id
-                          ? "❌ Credenciais pertencem a outra aplicação/ambiente"
-                          : "Validação pendente"}
-                    </p>
-                    {o.mercado_pago_order_id && (
-                      <div className="mt-2 flex gap-3">
-                        <button
-                          className="text-blue-500"
-                          onClick={() =>
-                            void navigator.clipboard.writeText(
-                              o.mercado_pago_order_id,
-                            )
-                          }
-                        >
-                          Copiar Order ID
-                        </button>
-                        <button
-                          disabled={busy}
-                          className="text-blue-500"
-                          onClick={() => void synchronize(o.id)}
-                        >
-                          Sincronizar
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
+    <div className="mx-auto max-w-3xl">
+      <div className="mb-6 text-center">
+        <div className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-blue-500/10 text-blue-500">
+          <Heart aria-hidden="true" fill="currentColor" size={24} />
         </div>
+        <h2 className="text-3xl font-black">Apoie o projeto</h2>
+        <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-zinc-500">
+          Se você gosta do projeto e quer contribuir com seu desenvolvimento,
+          pode apoiar com qualquer valor através do Pix.
+        </p>
       </div>
-    </>
+
+      <Card className="overflow-hidden p-0">
+        <div className="bg-gradient-to-br from-blue-500/10 via-transparent to-violet-500/10 p-5 sm:p-8">
+          <div className="mx-auto w-full max-w-sm rounded-3xl bg-white p-4 shadow-xl shadow-blue-500/10 sm:p-6">
+            <QRCodeSVG
+              aria-label="QR Code Pix para apoiar o projeto"
+              bgColor="#ffffff"
+              fgColor="#09090b"
+              includeMargin
+              level="M"
+              size={320}
+              style={{ width: "100%", height: "auto", display: "block" }}
+              title="QR Code Pix"
+              value={DONATION_PIX.code}
+            />
+          </div>
+
+          <div className="mx-auto mt-6 max-w-xl text-center">
+            <h3 className="text-lg font-bold">Escaneie com o aplicativo do seu banco</h3>
+            <p className="mt-2 text-sm text-zinc-500">
+              Este QR Code não possui valor definido. Você escolhe livremente o
+              valor da contribuição no momento do envio.
+            </p>
+            <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-blue-500/10 px-4 py-2 text-sm font-semibold text-blue-600 dark:text-blue-400">
+              <Info aria-hidden="true" size={16} />
+              Qualquer valor é bem-vindo.
+            </div>
+          </div>
+        </div>
+
+        <div className="p-5 sm:p-8">
+          <div className="flex items-center gap-2">
+            <QrCode aria-hidden="true" className="text-blue-500" size={20} />
+            <h3 className="font-bold">Pix Copia e Cola</h3>
+          </div>
+          <div className="mt-3 overflow-hidden rounded-2xl border bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950">
+            <p className="truncate font-mono text-xs text-zinc-600 dark:text-zinc-400" title={DONATION_PIX.code}>
+              {DONATION_PIX.code}
+            </p>
+          </div>
+          <Button className="mt-4 min-h-12 w-full" onClick={() => void copy()}>
+            {copied ? <Check aria-hidden="true" size={18} /> : <Copy aria-hidden="true" size={18} />}
+            {copied ? "Código Pix copiado" : "Copiar código Pix"}
+          </Button>
+          <div aria-live="polite" className="min-h-7 pt-2 text-center text-sm">
+            <span className={`text-green-600 transition-opacity duration-300 dark:text-green-400 ${copied ? "opacity-100" : "opacity-0"}`}>
+              ✓ Pix copiado
+            </span>
+            {copyError && <span className="text-red-500">Não foi possível copiar. Selecione o código manualmente.</span>}
+          </div>
+          <p className="mt-2 text-center text-xs leading-5 text-zinc-500">
+            O site apenas exibe o Pix estático e não consulta nem confirma o recebimento da contribuição.
+          </p>
+        </div>
+      </Card>
+    </div>
   );
 }

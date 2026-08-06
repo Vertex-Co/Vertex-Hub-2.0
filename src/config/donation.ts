@@ -1,0 +1,4 @@
+export const DONATION_PIX = Object.freeze({
+  type: "static" as const,
+  code: "00020126460014br.gov.bcb.pix0124andreverasz997@gmail.com5204000053039865802BR5925ANDRE GUSTAVO GOMES VERAS6008BRASILIA62580520SAN2026080602060872950300017br.gov.bcb.brcode01051.0.06304CDAC",
+});
